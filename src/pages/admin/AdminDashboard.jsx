@@ -13,7 +13,7 @@ const AdminDashboard = () => {
                             <span className="text-xl font-bold text-primary tracking-[-0.02em] font-headline"></span>
                             <div className="hidden lg:flex items-center bg-surface-container-low rounded-full px-4 py-2 w-96 group focus-within:ring-2 ring-primary/20 transition-all">
                                 <span className="material-symbols-outlined text-slate-400 mr-2" data-icon="search">search</span>
-                                <input id="dashboard-search-input" className="bg-transparent border-none focus:ring-0 text-sm w-full font-body placeholder:text-slate-400" placeholder="Search forms or results..." type="text" />
+                                <input id="dashboard-search-input" className="bg-transparent border-none focus:ring-0 text-sm w-full font-body placeholder:text-slate-400 outline-none" placeholder="Search forms or results..." type="text" />
                             </div>
                         </div>
                         <div className="flex items-center gap-4">
