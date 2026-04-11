@@ -1,10 +1,6 @@
-import React from 'react'
-import Navbar from './Navbar';
-
 const AdminDashboard = () => {
     return (
-        <div className='bg-background font-body text-on-surface min-h-screen flex'>
-            <Navbar />
+        <>
             <main className="flex-1 flex flex-col min-w-0 bg-surface">
 
                 <header className="w-full sticky top-0 z-50 bg-surface/80 backdrop-blur-xl  shadow-[0_20px_40px_rgba(0,80,102,0.06)]">
@@ -208,7 +204,7 @@ const AdminDashboard = () => {
                     <span className="text-[10px] font-medium">Results</span>
                 </button>
             </nav>
-        </div>
+        </>
     )
 }
 
