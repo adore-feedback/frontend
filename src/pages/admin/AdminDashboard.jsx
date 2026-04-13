@@ -1,18 +1,203 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+
+import { getFormResults, getForms } from '../../api/feedbackApi';
+import { demoForms, getDemoResults } from '../../data/demoFeedback';
+
+const numberFormatter = new Intl.NumberFormat('en-US');
+const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+
+const statusStyles = {
+    live: 'bg-tertiary-fixed text-on-tertiary-fixed',
+    draft: 'bg-surface-variant text-on-surface-variant',
+    closed: 'bg-secondary-container text-on-secondary-container',
+    archived: 'bg-surface-container-high text-on-surface-variant',
+};
+
+const defaultFormImage = 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80';
+
+const getFormId = (form) => form._id || form.id || form.slug;
+
+const getPrimaryAction = (form) => {
+    if (form.status === 'draft') {
+        return 'Publish Now';
+    }
+
+    if (form.responseCount > 0 || form.status === 'closed') {
+        return 'View Results';
+    }
+
+    return 'Share Form';
+};
+
+const getSentiment = (breakdown = [], sentiment) =>
+    breakdown.find((item) => item.sentiment === sentiment) || { count: 0, percentage: 0 };
+
+const buildResponseTrend = (responses = []) => {
+    const counts = responses.reduce((result, response) => {
+        const date = response.submittedAt ? dateFormatter.format(new Date(response.submittedAt)) : 'No date';
+        result[date] = (result[date] || 0) + 1;
+        return result;
+    }, {});
+
+    const rows = Object.entries(counts).slice(0, 7).reverse();
+    const max = Math.max(...rows.map(([, count]) => count), 1);
+
+    return rows.map(([date, count]) => ({
+        date,
+        count,
+        height: Math.max((count / max) * 100, 12),
+    }));
+};
+
+const SentimentPie = ({ positive, neutral, negative }) => {
+    const total = positive.count + neutral.count + negative.count || 1;
+    const positiveStop = (positive.count / total) * 100;
+    const neutralStop = positiveStop + (neutral.count / total) * 100;
+
+    return (
+        <div className="flex items-center gap-6">
+            <div
+                aria-label="Sentiment pie chart"
+                className="h-40 w-40 rounded-full"
+                role="img"
+                style={{
+                    background: `conic-gradient(#376c40 0 ${positiveStop}%, #e3e2e3 ${positiveStop}% ${neutralStop}%, #ba1a1a ${neutralStop}% 100%)`,
+                }}
+            ></div>
+            <div className="space-y-3 text-sm text-secondary">
+                <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-tertiary-container"></span>
+                    Positive: {positive.count}
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-surface-container-highest"></span>
+                    Neutral: {neutral.count}
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-error"></span>
+                    Negative: {negative.count}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ResponseBars = ({ trend }) => (
+    <div className="flex h-44 items-end gap-4">
+        {trend.length === 0 && <p className="text-sm text-secondary">Responses will appear here after the form is shared.</p>}
+        {trend.map((item) => (
+            <div className="flex flex-1 flex-col items-center gap-2" key={item.date}>
+                <div className="flex h-32 w-full items-end rounded-md bg-surface-container-high">
+                    <div className="w-full rounded-md bg-primary" style={{ height: `${item.height}%` }}></div>
+                </div>
+                <span className="text-xs font-semibold text-secondary">{item.date}</span>
+                <span className="text-xs text-slate-500">{item.count}</span>
+            </div>
+        ))}
+    </div>
+);
+
 const AdminDashboard = () => {
+    const [forms, setForms] = useState(demoForms);
+    const [selectedFormId, setSelectedFormId] = useState(getFormId(demoForms[0]));
+    const [selectedResult, setSelectedResult] = useState(getDemoResults(getFormId(demoForms[0])));
+    const [isLoading, setIsLoading] = useState(true);
+    const [notice, setNotice] = useState('');
+
+    useEffect(() => {
+        let isActive = true;
+
+        const loadForms = async () => {
+            try {
+                const data = await getForms();
+                const apiForms = Array.isArray(data.forms) ? data.forms : [];
+
+                if (!isActive) {
+                    return;
+                }
+
+                if (apiForms.length > 0) {
+                    setForms(apiForms);
+                    setSelectedFormId((current) => current || getFormId(apiForms[0]));
+                    setNotice('');
+                } else {
+                    setForms(demoForms);
+                    setSelectedFormId(getFormId(demoForms[0]));
+                    setNotice('No forms are saved yet. Showing demo collections until you create the first real form.');
+                }
+            } catch {
+                if (isActive) {
+                    setForms(demoForms);
+                    setSelectedFormId(getFormId(demoForms[0]));
+                    setNotice('Backend is not connected yet. Showing demo collections while the API is offline.');
+                }
+            } finally {
+                if (isActive) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        loadForms();
+
+        return () => {
+            isActive = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!selectedFormId) {
+            return;
+        }
+
+        let isActive = true;
+
+        const loadSelectedResult = async () => {
+            try {
+                const data = await getFormResults(selectedFormId);
+
+                if (isActive) {
+                    setSelectedResult(data);
+                }
+            } catch {
+                if (isActive) {
+                    setSelectedResult(getDemoResults(selectedFormId));
+                }
+            }
+        };
+
+        loadSelectedResult();
+
+        return () => {
+            isActive = false;
+        };
+    }, [selectedFormId]);
+
+    const selectedForm = useMemo(
+        () => forms.find((form) => getFormId(form) === selectedFormId) || selectedResult.form || forms[0],
+        [forms, selectedFormId, selectedResult.form],
+    );
+
+    const analytics = selectedResult.analytics || {};
+    const sentimentBreakdown = analytics.sentimentBreakdown || [];
+    const positive = getSentiment(sentimentBreakdown, 'positive');
+    const neutral = getSentiment(sentimentBreakdown, 'neutral');
+    const negative = getSentiment(sentimentBreakdown, 'negative');
+    const totalResponses = analytics.totalResponses ?? selectedForm?.responseCount ?? 0;
+    const recentResponses = analytics.recentResponses || [];
+    const trend = buildResponseTrend(recentResponses);
+
     return (
         <>
             <main className="flex-1 flex flex-col min-w-0 bg-surface">
-
-                <header className="w-full sticky top-0 z-50 bg-surface/80 backdrop-blur-xl  shadow-[0_20px_40px_rgba(0,80,102,0.06)]">
+                <header className="w-full sticky top-0 z-50 bg-surface/80 backdrop-blur-xl shadow-[0_20px_40px_rgba(0,80,102,0.06)]">
                     <div className="flex justify-between items-center px-8 py-4 max-w-7xl mx-auto w-full">
-                        <div className="flex items-center gap-8">
-                            <span className="text-xl font-bold text-primary tracking-[-0.02em] font-headline"></span>
-                            <div className="hidden lg:flex items-center bg-surface-container-low rounded-full px-4 py-2 w-96 group focus-within:ring-2 ring-primary/20 transition-all">
-                                <span className="material-symbols-outlined text-slate-400 mr-2" data-icon="search">search</span>
-                                <input id="dashboard-search-input" className="bg-transparent border-none focus:ring-0 text-sm w-full font-body placeholder:text-slate-400 outline-none" placeholder="Search forms or results..." type="text" />
-                            </div>
+                        <div className="hidden lg:flex items-center bg-surface-container-low rounded-full px-4 py-2 w-96 group focus-within:ring-2 ring-primary/20 transition-all">
+                            <span className="material-symbols-outlined text-slate-400 mr-2" data-icon="search">search</span>
+                            <input id="dashboard-search-input" className="bg-transparent border-none focus:ring-0 text-sm w-full font-body placeholder:text-slate-400 outline-none" placeholder="Search forms or results..." type="text" />
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 ml-auto">
                             <button id="notifications-button" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors active:scale-95 duration-200">
                                 <span className="material-symbols-outlined" data-icon="notifications">notifications</span>
                             </button>
@@ -20,192 +205,175 @@ const AdminDashboard = () => {
                                 <span className="material-symbols-outlined" data-icon="help_outline">help_outline</span>
                             </button>
                             <div className="h-8 w-8 rounded-full bg-primary-container flex items-center justify-center overflow-hidden border border-primary/10">
-                                <img alt="Staff User Profile" className="h-full w-full object-cover" data-alt="Professional headshot of a middle-aged woman with a friendly expression in a modern office environment with soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBz7fF97jRh3Z5nC_LIQuYW7mEcKQ65MoPtqvXxOFUPPARNH5ppKfkK1_fc5zgr4y8Tp78YYcViWQwh0Q-Mk3NmUaIfJt7GXBq4OJBBDc5Vi1QzMuRAteUFa77dalMXXIqmZKhTBtmEw9p7cADgUB8l1F8fZlvmpSXlxVFI1G8VAdGUwRRjsWS-D0JvW1Y95K2jkh_FitUrjjxjES_oOfXQ1cRqqALhpGnJ7QyLCaYV7F8pWeI14ALAcgWF8E8gdEYfh67R4ncXoEX2" />
+                                <img alt="Staff user profile" className="h-full w-full object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80" />
                             </div>
                         </div>
                     </div>
                 </header>
 
                 <section className="px-8 py-12 lg:px-12 max-w-7xl mx-auto w-full">
-
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
                         <div className="max-w-2xl">
-                            <span className="text-[0.6875rem] font-bold tracking-[0.05em] text-primary uppercase font-label">Form Management</span>
-                            <h2 className="font-headline text-4xl lg:text-5xl font-extrabold text-primary mt-2 tracking-tight">The Living Archive Dashboard</h2>
+                            <span className="text-[0.6875rem] font-bold text-primary uppercase font-label">Form Collections</span>
+                            <h2 className="font-headline text-4xl lg:text-5xl font-extrabold text-primary mt-2">Feedback Form Dashboard</h2>
                             <p className="mt-4 text-secondary text-lg font-body leading-relaxed">
-                                Curate and monitor your organization's human stories. Every response is a data point in the larger narrative of impact.
+                                Select one unique form to view its responses, sentiment, graph, and newest feedback providers.
                             </p>
+                            {notice && (
+                                <p className="mt-4 text-sm font-medium text-secondary bg-surface-container-low inline-flex px-4 py-2 rounded-lg">
+                                    {notice}
+                                </p>
+                            )}
+                            <p className="mt-3 text-sm text-slate-500">{isLoading ? 'Syncing form collections...' : 'Showing one selected form at a time.'}</p>
                         </div>
-                        <button id="create-new-form-btn" className="flex items-center justify-center gap-2 bg-primary text-on-primary px-8 py-4 rounded-md font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10">
+                        <Link id="create-new-form-btn" className="flex items-center justify-center gap-2 bg-primary text-on-primary px-8 py-4 rounded-md font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10" to="/admin/forms/new">
                             <span className="material-symbols-outlined" data-icon="add">add</span>
                             Create New Form
-                        </button>
+                        </Link>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                        <div className="p-8 bg-surface-container-low rounded-xl border-none flex flex-col justify-between h-48">
-                            <span className="text-xs font-bold tracking-widest text-secondary uppercase">Active Collections</span>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-5xl font-headline font-bold text-primary">12</span>
-                                <span className="text-tertiary font-medium text-sm">+2 this month</span>
-                            </div>
-                        </div>
-                        <div className="p-8 bg-secondary-container rounded-xl border-none flex flex-col justify-between h-48">
-                            <span className="text-xs font-bold tracking-widest text-on-secondary-fixed uppercase">Total Responses</span>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-5xl font-headline font-bold text-on-secondary-fixed">2,481</span>
-                                <span className="text-on-secondary-fixed-variant font-medium text-sm">Real-time sync</span>
-                            </div>
-                        </div>
-                        <div className="p-8 bg-tertiary-container text-white rounded-xl border-none flex flex-col justify-between h-48 relative overflow-hidden">
-                            <div className="relative z-10">
-                                <span className="text-xs font-bold tracking-widest text-on-tertiary-container uppercase">Impact Score</span>
-                                <div className="flex items-baseline gap-2 mt-2">
-                                    <span className="text-5xl font-headline font-bold">94%</span>
-                                </div>
-                            </div>
-                            <div className="absolute -right-4 -bottom-4 opacity-10">
-                                <span className="material-symbols-outlined text-[120px]" data-icon="auto_awesome">auto_awesome</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-12">
-
-                        <div className="flex items-center justify-between border-b border-outline-variant/15 pb-4">
-                            <h3 className="text-xl font-headline font-bold text-primary">Recent Active Forms</h3>
-                            <div className="flex gap-4 text-sm font-medium text-secondary">
-                                <button className="hover:text-primary transition-colors">All Forms</button>
-                                <button className="text-primary border-b-2 border-primary">Drafts</button>
-                                <button className="hover:text-primary transition-colors">Archived</button>
-                            </div>
-                        </div>
-
-                        <article className="group bg-surface-container-lowest p-10 rounded-2xl flex flex-col lg:flex-row gap-10 items-start lg:items-center hover:bg-surface transition-colors duration-500 relative">
-                            <div className="w-full lg:w-1/4 aspect-[4/3] rounded-xl overflow-hidden bg-surface-container-highest">
-                                <img alt="Webinar Event" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="Softly focused wide shot of a professional digital webinar setup with glowing screens and blurred participants in a home office" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAiSiDb-c5s1tIU1oQ8jZTpMBN0kctcViAOrZ2kCx9OM_ndlnQZ6lsqTyrFKzWNGoMOd-ptyPNKU3bPTCiyVwatXtoYUrGgJBI_6FxZrf-TjwmGlHC_E3l5Iy6imrf9rqq5JtySxFlWgckNWydLvlOrQd341JPJpEJXQvc1_SVkk-vKbhKBmC4zJUe3JwwwujQciB3f0UlbtheCikQtpr274XwuMoNDrd0w7r4gvYobOdkNZS5PzRUdd20XCAzsymLbJ2A-v4De_Axa" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className="px-3 py-1 bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold uppercase tracking-widest rounded-full">Live</span>
-                                    <span className="text-xs text-slate-500 font-medium font-label">WEBINAR FEEDBACK</span>
-                                </div>
-                                <h4 className="text-2xl font-headline font-bold text-primary mb-3">Post-Webinar Engagement Survey 2024</h4>
-                                <p className="text-secondary leading-relaxed max-w-xl font-body">Gathering qualitative insights on the "Resilient Communities" series to shape future educational programming and resource allocation.</p>
-                                <div className="flex items-center gap-8 mt-8 text-sm text-slate-500">
-                                    <div className="flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-sm" data-icon="description">description</span>
-                                        <span>24 Questions</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-sm" data-icon="group">group</span>
-                                        <span>412 Responses</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="w-full lg:w-auto flex flex-col gap-3">
-                                <button className="w-full lg:w-48 bg-primary text-white py-4 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98]">View Results</button>
-                                <button className="w-full lg:w-48 bg-surface-container-high text-primary py-4 rounded-md text-sm font-semibold hover:bg-surface-variant transition-all active:scale-[0.98]">Edit Content</button>
-                            </div>
-                        </article>
-
-                        <article className="group bg-surface-container-lowest p-10 rounded-2xl flex flex-col lg:flex-row gap-10 items-start lg:items-center hover:bg-surface transition-colors duration-500 relative">
-                            <div className="w-full lg:w-1/4 aspect-[4/3] rounded-xl overflow-hidden bg-surface-container-highest">
-                                <img alt="Seminar Workshop" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="A group of diverse professionals engaged in a workshop, blurred in the background with a focus on a notebook and pencil" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfNVvQGujoaDKq7a0mhxX_uhxZSr2Bub025iyolZ5GtIQbwl7q-tAjx7eqaIWEvxAO4CibJBbFzO9VLyPpBx8rWNtSp9okllZ0XVxjH9EqOVtN0mnibSD7oPK6PBtgrXFV5zKjDbbDkUtpj0cl691ZxR2pF8Q0graGb_fceHUN_iHUgxegkxm4-tvcGLk2N7lX8DtTOojvZQSP3AOxUckMuJ6DL3KoiYDx6r06YkZ8RTACVfVlGSt4G-ALoDdKTZWOnb0r4Fhs8QpW" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className="px-3 py-1 bg-surface-variant text-on-surface-variant text-[10px] font-bold uppercase tracking-widest rounded-full">Draft</span>
-                                    <span className="text-xs text-slate-500 font-medium font-label">SEMINAR QUICK POLL</span>
-                                </div>
-                                <h4 className="text-2xl font-headline font-bold text-primary mb-3">Regional Summit Attendee Preference</h4>
-                                <p className="text-secondary leading-relaxed max-w-xl font-body">A condensed 5-question poll designed to quickly capture breakout session preferences for the upcoming Nairobi Summit.</p>
-                                <div className="flex items-center gap-8 mt-8 text-sm text-slate-500">
-                                    <div className="flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-sm" data-icon="description">description</span>
-                                        <span>5 Questions</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-sm" data-icon="history">history</span>
-                                        <span>Last edited 2h ago</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="w-full lg:w-auto flex flex-col gap-3">
-                                <button className="w-full lg:w-48 bg-primary text-white py-4 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98]">Publish Now</button>
-                                <button className="w-full lg:w-48 bg-surface-container-high text-primary py-4 rounded-md text-sm font-semibold hover:bg-surface-variant transition-all active:scale-[0.98]">Edit Draft</button>
-                            </div>
-                        </article>
-
-                        <article className="group bg-surface-container-lowest p-10 rounded-2xl flex flex-col lg:flex-row gap-10 items-start lg:items-center hover:bg-surface transition-colors duration-500 relative">
-                            <div className="w-full lg:w-1/4 aspect-[4/3] rounded-xl overflow-hidden bg-surface-container-highest">
-                                <img alt="Impact Report" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="Conceptual image of growth and progress with small green sprouts growing from a pile of earth on a clean white surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDM5Zt3N1yQEoCpeXN7-_8aWauX5SJfESOeN_ZoBJZJiB55g9DOX8UXTBN-gQ1QRYaweTrkPBeHp5KhhsnNAmlVeVcAA802lsdF5Qiazky5qrD1WHWuUzTZBjhmsZj-PkEfJ2c3vu2g93og-Au6ybCpesvYM55btR_2OKSkqdtC7oZAGGjKMjrr1DH22F64GHwMt9DNDatMdyMpjQ84CZsPuBOsYgnQbrCAwrv_5hV0hedOOauYHUuPRytd2raeabcrrHbDGllxi68_" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className="px-3 py-1 bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest rounded-full">Completed</span>
-                                    <span className="text-xs text-slate-500 font-medium font-label">ANNUAL IMPACT SURVEY</span>
-                                </div>
-                                <h4 className="text-2xl font-headline font-bold text-primary mb-3">FY23 Global Beneficiary Impact Assessment</h4>
-                                <p className="text-secondary leading-relaxed max-w-xl font-body">Long-form comprehensive survey capturing multi-dimensional impact across 14 operational regions for the annual board report.</p>
-                                <div className="flex items-center gap-8 mt-8 text-sm text-slate-500">
-                                    <div className="flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-sm" data-icon="description">description</span>
-                                        <span>65 Questions</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-sm" data-icon="done_all">done_all</span>
-                                        <span>1,850 Responses</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="w-full lg:w-auto flex flex-col gap-3">
-                                <button className="w-full lg:w-48 bg-primary text-white py-4 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98]">View Results</button>
-                                <button className="w-full lg:w-48 bg-surface-container-high text-primary py-4 rounded-md text-sm font-semibold hover:bg-surface-variant transition-all active:scale-[0.98]">Export PDF</button>
-                            </div>
-                        </article>
-                    </div>
-
-                    <div className="mt-20 flex flex-col md:flex-row items-center justify-between pt-8 border-t border-outline-variant/15">
-                        <p className="text-sm text-slate-500 font-medium italic">Showing 1-3 of 24 Collections</p>
-                        <div className="flex items-center gap-2 mt-4 md:mt-0">
-                            <button className="p-2 text-slate-400 hover:text-primary transition-colors">
-                                <span className="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+                    <div className="mb-10 flex flex-wrap gap-3">
+                        {forms.map((form) => (
+                            <button
+                                className={`rounded-md px-4 py-3 text-sm font-semibold transition-colors ${getFormId(form) === selectedFormId ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-primary hover:bg-surface-container-high'}`}
+                                key={getFormId(form)}
+                                type="button"
+                                onClick={() => setSelectedFormId(getFormId(form))}
+                            >
+                                {form.title}
                             </button>
-                            <button className="h-8 w-8 flex items-center justify-center rounded bg-primary text-white text-xs font-bold">1</button>
-                            <button className="h-8 w-8 flex items-center justify-center rounded hover:bg-surface-container text-xs font-bold">2</button>
-                            <button className="h-8 w-8 flex items-center justify-center rounded hover:bg-surface-container text-xs font-bold">3</button>
-                            <span className="px-2">...</span>
-                            <button className="h-8 w-8 flex items-center justify-center rounded hover:bg-surface-container text-xs font-bold">8</button>
-                            <button className="p-2 text-slate-400 hover:text-primary transition-colors">
-                                <span className="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
-                            </button>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+                        <div className="p-7 bg-surface-container-low rounded-xl flex flex-col justify-between h-40">
+                            <span className="text-xs font-bold text-secondary uppercase">Responses For This Form</span>
+                            <span className="text-5xl font-headline font-bold text-primary">{numberFormatter.format(totalResponses)}</span>
                         </div>
+                        <div className="p-7 bg-secondary-container rounded-xl flex flex-col justify-between h-40">
+                            <span className="text-xs font-bold text-on-secondary-fixed uppercase">New People</span>
+                            <span className="text-5xl font-headline font-bold text-on-secondary-fixed">{numberFormatter.format(recentResponses.length)}</span>
+                        </div>
+                        <div className="p-7 bg-tertiary-fixed rounded-xl flex flex-col justify-between h-40">
+                            <span className="text-xs font-bold text-on-tertiary-fixed uppercase">Positive</span>
+                            <span className="text-5xl font-headline font-bold text-on-tertiary-fixed">{numberFormatter.format(positive.count)}</span>
+                        </div>
+                        <div className="p-7 bg-error-container rounded-xl flex flex-col justify-between h-40">
+                            <span className="text-xs font-bold text-on-error-container uppercase">Negative</span>
+                            <span className="text-5xl font-headline font-bold text-on-error-container">{numberFormatter.format(negative.count)}</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+                        <section className="bg-surface-container-lowest p-8 rounded-xl">
+                            <div className="mb-6">
+                                <span className="text-xs font-bold text-secondary uppercase">{selectedForm?.formTypeLabel || selectedForm?.formType}</span>
+                                <h3 className="font-headline text-2xl font-bold text-primary mt-2">{selectedForm?.title}</h3>
+                                <p className="text-secondary mt-2">{selectedForm?.description}</p>
+                            </div>
+                            <SentimentPie positive={positive} neutral={neutral} negative={negative} />
+                        </section>
+
+                        <section className="bg-surface-container-lowest p-8 rounded-xl">
+                            <div className="mb-6">
+                                <h3 className="font-headline text-2xl font-bold text-primary">Response Graph</h3>
+                                <p className="text-secondary mt-2">Responses grouped by submission date for the selected form.</p>
+                            </div>
+                            <ResponseBars trend={trend} />
+                        </section>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.7fr] gap-8">
+                        <section className="space-y-8">
+                            <div className="flex items-center justify-between border-b border-outline-variant/15 pb-4">
+                                <h3 className="text-xl font-headline font-bold text-primary">Collections Of Forms</h3>
+                                <span className="text-sm text-secondary">{forms.length} forms</span>
+                            </div>
+
+                            {forms.map((form) => {
+                                const formId = getFormId(form);
+                                const primaryAction = getPrimaryAction(form);
+
+                                return (
+                                    <article key={formId} className={`group bg-surface-container-lowest p-8 rounded-2xl flex flex-col lg:flex-row gap-8 items-start lg:items-center hover:bg-surface transition-colors duration-500 relative ${formId === selectedFormId ? 'ring-2 ring-primary/20' : ''}`}>
+                                        <div className="w-full lg:w-1/4 aspect-[4/3] rounded-xl overflow-hidden bg-surface-container-highest">
+                                            <img alt={form.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src={form.imageUrl || defaultFormImage} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-wrap items-center gap-3 mb-4">
+                                                <span className={`px-3 py-1 text-[10px] font-bold uppercase rounded-full ${statusStyles[form.status] || statusStyles.archived}`}>
+                                                    {form.statusLabel || form.status}
+                                                </span>
+                                                <span className="text-xs text-slate-500 font-medium font-label uppercase">{form.formTypeLabel || form.formType}</span>
+                                                <span className="text-xs text-slate-500 font-medium font-label uppercase">{form.visibility}</span>
+                                            </div>
+                                            <h4 className="text-2xl font-headline font-bold text-primary mb-3">{form.title}</h4>
+                                            <p className="text-secondary leading-relaxed max-w-xl font-body">{form.description}</p>
+                                            <div className="flex flex-wrap items-center gap-8 mt-8 text-sm text-slate-500">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-sm" data-icon="description">description</span>
+                                                    <span>{form.questionCount || 0} Questions</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-sm" data-icon="group">group</span>
+                                                    <span>{numberFormatter.format(form.responseCount || 0)} Responses</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="w-full lg:w-auto flex flex-col gap-3">
+                                            <button className="w-full lg:w-48 bg-surface-container-high text-primary py-4 rounded-md text-sm font-semibold hover:bg-surface-variant transition-all active:scale-[0.98]" type="button" onClick={() => setSelectedFormId(formId)}>
+                                                Select Form
+                                            </button>
+                                            {primaryAction === 'View Results' ? (
+                                                <Link className="w-full lg:w-48 bg-primary text-white py-4 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] text-center" to={`/admin/result/${formId}`}>
+                                                    {primaryAction}
+                                                </Link>
+                                            ) : (
+                                                <Link className="w-full lg:w-48 bg-primary text-white py-4 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] text-center" to={`/form/${form.slug || formId}`}>
+                                                    Open Link
+                                                </Link>
+                                            )}
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                        </section>
+
+                        <section className="bg-surface-container-lowest p-8 rounded-xl h-fit">
+                            <h3 className="text-xl font-headline font-bold text-primary mb-6">New Feedback Providers</h3>
+                            <div className="space-y-4">
+                                {recentResponses.length === 0 && <p className="text-sm text-secondary">No responses for this form yet.</p>}
+                                {recentResponses.slice(0, 6).map((response) => (
+                                    <div className="flex items-center justify-between gap-4 border-b border-outline-variant/15 pb-4" key={response.id || response._id}>
+                                        <div>
+                                            <p className="font-semibold text-primary">{response.respondentName}</p>
+                                            <p className="text-xs text-secondary">{response.respondentRole || response.respondentEmail || 'Feedback submitted'}</p>
+                                        </div>
+                                        <span className="text-xs font-bold uppercase text-secondary">{response.sentimentLabel || response.sentiment}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
                     </div>
                 </section>
             </main>
 
-
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-surface/90 backdrop-blur-xl border-t border-slate-200/10 flex justify-around py-3 px-6 z-[60] shadow-[0_-10px_30px_rgba(0,80,102,0.1)]">
-                <button className="flex flex-col items-center gap-1 text-primary">
+                <Link className="flex flex-col items-center gap-1 text-primary" to="/admin">
                     <span className="material-symbols-outlined text-[20px]" data-icon="dashboard" style={{ fontVariationSettings: 'FILL 1' }}>dashboard</span>
                     <span className="text-[10px] font-bold">Dashboard</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-slate-400">
+                </Link>
+                <Link className="flex flex-col items-center gap-1 text-slate-400" to="/admin/forms/new">
                     <span className="material-symbols-outlined text-[20px]" data-icon="add_circle">add_circle</span>
                     <span className="text-[10px] font-medium">Create</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-slate-400">
-                    <span className="material-symbols-outlined text-[20px]" data-icon="live_tv">live_tv</span>
-                    <span className="text-[10px] font-medium">Live</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-slate-400">
+                </Link>
+                <Link className="flex flex-col items-center gap-1 text-slate-400" to="/admin/result">
                     <span className="material-symbols-outlined text-[20px]" data-icon="analytics">analytics</span>
                     <span className="text-[10px] font-medium">Results</span>
-                </button>
+                </Link>
             </nav>
         </>
-    )
-}
+    );
+};
 
-export default AdminDashboard
+export default AdminDashboard;
