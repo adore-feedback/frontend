@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 
 import { getFormResults, getForms } from '../../api/feedbackApi';
@@ -104,6 +104,16 @@ const AdminDashboard = () => {
     const [selectedResult, setSelectedResult] = useState(getDemoResults(getFormId(demoForms[0])));
     const [isLoading, setIsLoading] = useState(true);
     const [notice, setNotice] = useState('');
+    const [copiedFormId, setCopiedFormId] = useState('');
+
+    const copyFormLink = useCallback((form) => {
+        const slug = form.slug || getFormId(form);
+        const url = `${window.location.origin}/form/${slug}`;
+        navigator.clipboard.writeText(url).then(() => {
+            setCopiedFormId(getFormId(form));
+            setTimeout(() => setCopiedFormId(''), 2000);
+        });
+    }, []);
 
     useEffect(() => {
         let isActive = true;
@@ -119,7 +129,7 @@ const AdminDashboard = () => {
 
                 if (apiForms.length > 0) {
                     setForms(apiForms);
-                    setSelectedFormId((current) => current || getFormId(apiForms[0]));
+                    setSelectedFormId(getFormId(apiForms[0]));
                     setNotice('');
                 } else {
                     setForms(demoForms);
@@ -321,18 +331,26 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                         <div className="w-full lg:w-auto flex flex-col gap-3">
-                                            <button className="w-full lg:w-48 bg-surface-container-high text-primary py-4 rounded-md text-sm font-semibold hover:bg-surface-variant transition-all active:scale-[0.98]" type="button" onClick={() => setSelectedFormId(formId)}>
+                                            <button className="w-full lg:w-48 bg-surface-container-high text-primary py-3 rounded-md text-sm font-semibold hover:bg-surface-variant transition-all active:scale-[0.98]" type="button" onClick={() => setSelectedFormId(formId)}>
                                                 Select Form
                                             </button>
                                             {primaryAction === 'View Results' ? (
-                                                <Link className="w-full lg:w-48 bg-primary text-white py-4 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] text-center" to={`/admin/result/${formId}`}>
+                                                <Link className="w-full lg:w-48 bg-primary text-white py-3 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] text-center" to={`/admin/result/${formId}`}>
                                                     {primaryAction}
                                                 </Link>
                                             ) : (
-                                                <Link className="w-full lg:w-48 bg-primary text-white py-4 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] text-center" to={`/form/${form.slug || formId}`}>
-                                                    Open Link
+                                                <Link className="w-full lg:w-48 bg-primary text-white py-3 rounded-md text-sm font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] text-center" to={`/form/${form.slug || formId}`} target="_blank">
+                                                    Open Form
                                                 </Link>
                                             )}
+                                            <button
+                                                className="w-full lg:w-48 flex items-center justify-center gap-2 border border-outline-variant/30 text-secondary py-3 rounded-md text-sm font-semibold hover:bg-surface-container-high transition-all active:scale-[0.98]"
+                                                type="button"
+                                                onClick={() => copyFormLink(form)}
+                                            >
+                                                <span className="material-symbols-outlined text-[16px]">{copiedFormId === formId ? 'check' : 'content_copy'}</span>
+                                                {copiedFormId === formId ? 'Link Copied!' : 'Copy Link'}
+                                            </button>
                                         </div>
                                     </article>
                                 );

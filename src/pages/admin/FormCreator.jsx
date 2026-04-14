@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 
 import { createForm } from '../../api/feedbackApi';
@@ -74,6 +74,15 @@ const FormCreator = () => {
         questions: [emptyQuestion()],
     });
     const [status, setStatus] = useState({ type: '', message: '', link: '' });
+    const [shareUrl, setShareUrl] = useState('');
+    const [copied, setCopied] = useState(false);
+
+    const copyLink = useCallback(() => {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    }, [shareUrl]);
 
     const updateField = (field, value) => {
         setForm((current) => ({
@@ -165,10 +174,11 @@ const FormCreator = () => {
         try {
             const data = await createForm(payload);
             const formId = data.form.slug || data.form._id;
-
+            const fullUrl = `${window.location.origin}/form/${formId}`;
+            setShareUrl(fullUrl);
             setStatus({
                 type: 'success',
-                message: `Form created. Share this generated link: ${window.location.origin}/form/${formId}`,
+                message: 'Form created successfully!',
                 link: `/form/${formId}`,
             });
         } catch (error) {
@@ -317,9 +327,34 @@ const FormCreator = () => {
                     </section>
 
                     {status.message && (
-                        <div className={`rounded-lg px-4 py-3 text-sm font-medium ${status.type === 'error' ? 'bg-error-container text-on-error-container' : 'bg-tertiary-fixed text-on-tertiary-fixed'}`}>
-                            <p>{status.message}</p>
-                            {status.link && <Link className="underline" to={status.link}>Open public form</Link>}
+                        <div className={`rounded-xl px-5 py-4 text-sm font-medium space-y-3 ${status.type === 'error' ? 'bg-error-container text-on-error-container' : 'bg-tertiary-fixed text-on-tertiary-fixed'}`}>
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                                    {status.type === 'error' ? 'error' : 'check_circle'}
+                                </span>
+                                <p className="font-semibold">{status.message}</p>
+                            </div>
+                            {status.link && shareUrl && (
+                                <div className="flex items-center gap-2 bg-white/30 rounded-lg overflow-hidden">
+                                    <span className="flex-1 px-3 py-2 font-mono text-xs truncate">{shareUrl}</span>
+                                    <button
+                                        type="button"
+                                        className="flex items-center gap-1 px-3 py-2 bg-white/30 hover:bg-white/50 text-xs font-bold transition-colors shrink-0"
+                                        onClick={copyLink}
+                                    >
+                                        <span className="material-symbols-outlined text-[14px]">{copied ? 'check' : 'content_copy'}</span>
+                                        {copied ? 'Copied!' : 'Copy'}
+                                    </button>
+                                    <Link
+                                        className="flex items-center gap-1 px-3 py-2 bg-white/30 hover:bg-white/50 text-xs font-bold transition-colors shrink-0"
+                                        to={status.link}
+                                        target="_blank"
+                                    >
+                                        <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                                        Open
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     )}
 
