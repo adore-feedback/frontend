@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { getPublicForm, submitPublicFormResponse } from '../api/feedbackApi';
 
 const getSentiment = (rating) => {
@@ -38,23 +38,59 @@ const StarRating = ({ value, onChange }) => {
 };
 
 const PublicFeedbackForm = () => {
-    const { formId } = useParams();
-    const [form, setForm]           = useState(null);
-    const [respondent, setRespondent] = useState({ name:'', email:'', phone:'', uniqueId:'', companyName:'', companyDetails:'' });
-    const [answers, setAnswers]     = useState({});
-    const [status, setStatus]       = useState({ type:'', message:'' });
-    const [isLoading, setIsLoading] = useState(true);
-    const [submitted, setSubmitted] = useState(false);
-    const [activeQ, setActiveQ]     = useState(null);
+    const { formId }         = useParams();
+    const [searchParams]     = useSearchParams();
+
+    // Read personalization params from URL (?name=John&email=...&company=...)
+    const urlName    = searchParams.get('name')    || '';
+    const urlEmail   = searchParams.get('email')   || '';
+    const urlPhone   = searchParams.get('phone')   || '';
+    const urlCompany = searchParams.get('company') || '';
+    const urlUniqueId= searchParams.get('uniqueId')|| '';
+
+    const [form, setForm]             = useState(null);
+    const [prefillGreeting, setPrefillGreeting] = useState(''); // server-side greeting name
+    const [respondent, setRespondent] = useState({
+        name: urlName, email: urlEmail, phone: urlPhone,
+        uniqueId: urlUniqueId, companyName: urlCompany, companyDetails: '',
+    });
+    const [answers, setAnswers]       = useState({});
+    const [status, setStatus]         = useState({ type:'', message:'' });
+    const [isLoading, setIsLoading]   = useState(true);
+    const [submitted, setSubmitted]   = useState(false);
+    const [activeQ, setActiveQ]       = useState(null);
 
     const loadForm = useCallback(async () => {
         setIsLoading(true);
         try {
-            const data = await getPublicForm(formId);
+            // Pass URL-based access credentials for restricted forms
+            const access = {};
+            if (urlEmail)    access.email    = urlEmail;
+            if (urlPhone)    access.phone    = urlPhone;
+            if (urlUniqueId) access.uniqueId = urlUniqueId;
+
+            const data = await getPublicForm(formId, access);
             setForm(data.form);
-        } catch (err) { setStatus({ type:'error', message: err.message }); }
-        finally { setIsLoading(false); }
-    }, [formId]);
+
+            // Merge server-side prefill with URL params
+            // URL params take priority (they were set by the admin intentionally)
+            const serverPrefill = data.prefill || {};
+            setPrefillGreeting(serverPrefill.name || urlName || '');
+
+            setRespondent(prev => ({
+                name:         urlName    || serverPrefill.name        || prev.name        || '',
+                email:        urlEmail   || serverPrefill.email       || prev.email       || '',
+                phone:        urlPhone   || serverPrefill.phone       || prev.phone       || '',
+                uniqueId:     urlUniqueId|| serverPrefill.uniqueId    || prev.uniqueId    || '',
+                companyName:  urlCompany || serverPrefill.companyName || prev.companyName || '',
+                companyDetails: prev.companyDetails || '',
+            }));
+        } catch (err) {
+            setStatus({ type:'error', message: err.message });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [formId, urlEmail, urlPhone, urlUniqueId, urlName, urlCompany]);
 
     useEffect(() => { loadForm(); }, [loadForm]);
 
@@ -63,18 +99,27 @@ const PublicFeedbackForm = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setStatus({ type:'', message:'' });
         const payload = {
             respondent,
-            rating: ratingValue || undefined,
+            rating: ratingValue ? Number(ratingValue) : undefined,
             ...(ratingValue != null && ratingValue !== '' ? { sentiment: getSentiment(ratingValue) } : {}),
-            answers: form.questions.map(q => ({ questionId: q.id, prompt: q.prompt, type: q.type, value: answers[q.id] ?? '' })),
+            answers: form.questions.map(q => ({
+                questionId: q.id,
+                prompt: q.prompt,
+                type: q.type,
+                value: answers[q.id] ?? '',
+            })),
         };
         try {
-            await submitPublicFormResponse(form.id || form.slug, payload);
+            await submitPublicFormResponse(form._id || form.id || form.slug, payload);
             setSubmitted(true);
-        } catch (err) { setStatus({ type:'error', message: err.message }); }
+        } catch (err) {
+            setStatus({ type:'error', message: err.message });
+        }
     };
 
+    /* ── Loading ── */
     if (isLoading) return (
         <div style={S.loadWrap}>
             <style>{CSS}</style>
@@ -83,6 +128,23 @@ const PublicFeedbackForm = () => {
         </div>
     );
 
+    /* ── Error / not found ── */
+    if (!form && status.type === 'error') return (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',fontFamily:"'DM Sans',system-ui"}}>
+            <style>{CSS}</style>
+            <div style={{textAlign:'center',padding:40,maxWidth:400}}>
+                <span style={{fontSize:48}}>🔒</span>
+                <p style={{fontSize:16,fontWeight:700,color:'#ef4444',marginTop:12}}>{status.message}</p>
+                <p style={{fontSize:13,color:'#94a3b8',marginTop:8}}>
+                    {status.message?.includes('not authorized') || status.message?.includes('credentials')
+                        ? 'This form requires a personalized link. Please use the link that was sent to you.'
+                        : 'If you believe this is an error, please contact the form administrator.'}
+                </p>
+            </div>
+        </div>
+    );
+
+    /* ── Submitted ── */
     if (submitted) return (
         <div style={S.successWrap}>
             <style>{CSS}</style>
@@ -92,28 +154,30 @@ const PublicFeedbackForm = () => {
                         <polyline points="20 6 9 17 4 12"/>
                     </svg>
                 </div>
-                <h1 style={S.successTitle}>Thank you!</h1>
+                <h1 style={S.successTitle}>
+                    {respondent.name ? `Thank you, ${respondent.name.split(' ')[0]}!` : 'Thank you!'}
+                </h1>
                 <p style={S.successDesc}>
                     Your feedback for <strong style={{color:'#3b82f6'}}>{form?.title}</strong> has been securely recorded.
                 </p>
+                <p style={{fontSize:13,color:'#64748b',lineHeight:1.6,margin:'0 0 20px'}}>
+                    {respondent.email
+                        ? `A confirmation has been sent to ${respondent.email}.`
+                        : 'You may close this window.'}
+                </p>
                 <div style={S.successDivider}/>
-                <p style={{fontSize:12,color:'#94a3b8',margin:0}}>You may close this window.</p>
+                <p style={{fontSize:12,color:'#94a3b8',margin:0}}>Powered by Simtrak Feedback Hub</p>
             </div>
         </div>
     );
 
-    if (!form) return (
-        <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',fontFamily:"'DM Sans',system-ui"}}>
-            <style>{CSS}</style>
-            <div style={{textAlign:'center',padding:40}}>
-                <span style={{fontSize:48}}>❌</span>
-                <p style={{fontSize:16,fontWeight:700,color:'#ef4444',marginTop:12}}>{status.message || 'Form not found.'}</p>
-            </div>
-        </div>
-    );
+    if (!form) return null;
 
     const FORM_TYPE_ICONS = { webinar:'🎙️', flash:'⚡', survey:'📊', default:'📋' };
     const typeIcon = FORM_TYPE_ICONS[form.formType] || FORM_TYPE_ICONS.default;
+
+    // Personalized greeting shown in hero if we have a name
+    const greeting = prefillGreeting || respondent.name;
 
     return (
         <main style={S.main}>
@@ -126,10 +190,12 @@ const PublicFeedbackForm = () => {
                         <span>{typeIcon}</span>
                         <span>{form.formType || 'Feedback Form'}</span>
                     </div>
+                    {greeting && (
+                        <p style={S.heroGreeting}>👋 Hey {greeting}, we'd love your feedback!</p>
+                    )}
                     <h1 style={S.heroTitle}>{form.title}</h1>
                     {form.description && <p style={S.heroDesc}>{form.description}</p>}
                 </div>
-                {/* Decorative dots */}
                 <div style={S.heroDots}/>
             </div>
 
@@ -155,30 +221,56 @@ const PublicFeedbackForm = () => {
                         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                             <div style={S.inputWrap}>
                                 <label style={S.inputLabel}>Full Name <span style={{color:'#ef4444'}}>*</span></label>
-                                <input style={S.input} required placeholder="Your full name" value={respondent.name} onChange={e => setRespondent({...respondent,name:e.target.value})}/>
+                                <input
+                                    style={S.input} required
+                                    placeholder="Your full name"
+                                    value={respondent.name}
+                                    onChange={e => setRespondent({...respondent, name: e.target.value})}
+                                />
                             </div>
                             <div style={S.inputWrap}>
                                 <label style={S.inputLabel}>Email Address</label>
-                                <input style={S.input} type="email" placeholder="you@example.com" value={respondent.email} onChange={e => setRespondent({...respondent,email:e.target.value})}/>
+                                <input
+                                    style={S.input} type="email"
+                                    placeholder="you@example.com"
+                                    value={respondent.email}
+                                    onChange={e => setRespondent({...respondent, email: e.target.value})}
+                                />
                             </div>
                             {form.collectsPhone && (
                                 <div style={S.inputWrap}>
                                     <label style={S.inputLabel}>Phone {form.phoneRequired && <span style={{color:'#ef4444'}}>*</span>}</label>
-                                    <input style={S.input} type="tel" placeholder="+1 (555) 000-0000" required={form.phoneRequired} value={respondent.phone} onChange={e => setRespondent({...respondent,phone:e.target.value})}/>
+                                    <input
+                                        style={S.input} type="tel"
+                                        placeholder="+91 98765 43210"
+                                        required={form.phoneRequired}
+                                        value={respondent.phone}
+                                        onChange={e => setRespondent({...respondent, phone: e.target.value})}
+                                    />
                                 </div>
                             )}
                             {form.collectsCompanyDetails && (
                                 <div style={S.inputWrap}>
-                                    <label style={S.inputLabel}>Company Name {form.companyDetailsRequired && <span style={{color:'#ef4444'}}>*</span>}</label>
-                                    <input style={S.input} placeholder="Your organization" required={form.companyDetailsRequired} value={respondent.companyName} onChange={e => setRespondent({...respondent,companyName:e.target.value})}/>
+                                    <label style={S.inputLabel}>Company {form.companyDetailsRequired && <span style={{color:'#ef4444'}}>*</span>}</label>
+                                    <input
+                                        style={S.input}
+                                        placeholder="Your organization"
+                                        required={form.companyDetailsRequired}
+                                        value={respondent.companyName}
+                                        onChange={e => setRespondent({...respondent, companyName: e.target.value})}
+                                    />
                                 </div>
                             )}
                         </div>
                     </div>
 
                     {/* Questions */}
-                    {form.questions.map((q, idx) => (
-                        <div key={q.id} style={{...S.card, ...(activeQ===q.id?S.cardFocused:{})}} onClick={() => setActiveQ(q.id)}>
+                    {(form.questions || []).map((q, idx) => (
+                        <div
+                            key={q.id || idx}
+                            style={{...S.card, ...(activeQ === (q.id || idx) ? S.cardFocused : {})}}
+                            onClick={() => setActiveQ(q.id || idx)}
+                        >
                             <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
                                 <div style={S.qNum}>{idx + 1}</div>
                                 <label style={S.qPrompt}>
@@ -188,7 +280,10 @@ const PublicFeedbackForm = () => {
                             </div>
 
                             {q.type === 'rating' && (
-                                <StarRating value={answers[q.id]||''} onChange={val => setAnswers({...answers,[q.id]:val})}/>
+                                <StarRating
+                                    value={answers[q.id] || ''}
+                                    onChange={val => setAnswers({...answers, [q.id]: val})}
+                                />
                             )}
 
                             {q.type === 'text' && (
@@ -196,15 +291,19 @@ const PublicFeedbackForm = () => {
                                     <textarea
                                         style={S.textarea}
                                         required={q.required}
-                                        value={answers[q.id]||''}
-                                        onChange={e => setAnswers({...answers,[q.id]:e.target.value})}
+                                        value={answers[q.id] || ''}
+                                        onChange={e => setAnswers({...answers, [q.id]: e.target.value})}
                                         placeholder="Share your thoughts…"
                                     />
                                     {q.answerTemplates?.length > 0 && (
                                         <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
                                             <span style={{fontSize:10,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',alignSelf:'center',marginRight:4}}>Templates:</span>
                                             {q.answerTemplates.slice(0,3).map(t => (
-                                                <button key={t} type="button" onClick={() => setAnswers({...answers,[q.id]:t})} style={S.templateBtn}>
+                                                <button
+                                                    key={t} type="button"
+                                                    onClick={() => setAnswers({...answers, [q.id]: t})}
+                                                    style={S.templateBtn}
+                                                >
                                                     {t}
                                                 </button>
                                             ))}
@@ -215,21 +314,49 @@ const PublicFeedbackForm = () => {
 
                             {q.type === 'single-choice' && (
                                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                                    {(q.options||[]).map(opt => (
+                                    {(q.options || []).map(opt => (
                                         <label key={opt} style={{
                                             ...S.choiceLabel,
-                                            ...(answers[q.id]===opt ? S.choiceLabelSelected : {}),
+                                            ...(answers[q.id] === opt ? S.choiceLabelSelected : {}),
                                         }}>
                                             <div style={{
                                                 ...S.choiceCircle,
-                                                ...(answers[q.id]===opt ? S.choiceCircleSelected : {}),
+                                                ...(answers[q.id] === opt ? S.choiceCircleSelected : {}),
                                             }}>
-                                                {answers[q.id]===opt && <div style={{width:8,height:8,borderRadius:'50%',background:'#fff'}}/>}
+                                                {answers[q.id] === opt && <div style={{width:8,height:8,borderRadius:'50%',background:'#fff'}}/>}
                                             </div>
-                                            <input type="radio" className="sr-only" checked={answers[q.id]===opt} onChange={() => setAnswers({...answers,[q.id]:opt})} style={{display:'none'}}/>
-                                            <span style={{fontSize:13,fontWeight:answers[q.id]===opt?700:500}}>{opt}</span>
+                                            <input type="radio" style={{display:'none'}} checked={answers[q.id] === opt} onChange={() => setAnswers({...answers, [q.id]: opt})}/>
+                                            <span style={{fontSize:13,fontWeight:answers[q.id] === opt ? 700 : 500}}>{opt}</span>
                                         </label>
                                     ))}
+                                </div>
+                            )}
+
+                            {q.type === 'multiple-choice' && (
+                                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                                    {(q.options || []).map(opt => {
+                                        const selected = (answers[q.id] || []).includes(opt);
+                                        return (
+                                            <label key={opt} style={{
+                                                ...S.choiceLabel,
+                                                ...(selected ? S.choiceLabelSelected : {}),
+                                            }}>
+                                                <div style={{
+                                                    width:20, height:20, borderRadius:6, flexShrink:0, display:'flex',
+                                                    alignItems:'center', justifyContent:'center', transition:'all 0.15s',
+                                                    border: selected ? '2px solid #3b82f6' : '2px solid #e8ecf0',
+                                                    background: selected ? '#3b82f6' : 'transparent',
+                                                }}>
+                                                    {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                                                </div>
+                                                <input type="checkbox" style={{display:'none'}} checked={selected} onChange={() => {
+                                                    const prev = answers[q.id] || [];
+                                                    setAnswers({...answers, [q.id]: selected ? prev.filter(x => x !== opt) : [...prev, opt]});
+                                                }}/>
+                                                <span style={{fontSize:13,fontWeight:selected ? 700 : 500}}>{opt}</span>
+                                            </label>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -267,11 +394,12 @@ const S = {
     successCard: { background:'#fff',borderRadius:20,padding:'48px 40px',textAlign:'center',maxWidth:440,boxShadow:'0 20px 60px rgba(59,130,246,0.12)',border:'1px solid #e8ecf0' },
     successIcon: { width:72,height:72,borderRadius:20,background:'linear-gradient(135deg,#10b981,#059669)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px',boxShadow:'0 8px 24px rgba(16,185,129,0.35)' },
     successTitle:{ fontSize:28,fontWeight:800,color:'#0f172a',margin:'0 0 8px',letterSpacing:'-0.02em' },
-    successDesc: { fontSize:14,color:'#64748b',lineHeight:1.6,margin:'0 0 20px' },
+    successDesc: { fontSize:14,color:'#64748b',lineHeight:1.6,margin:'0 0 12px' },
     successDivider:{ height:1,background:'#f1f5f9',margin:'20px 0' },
     hero:        { background:'linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1d4ed8 100%)',padding:'60px 20px',position:'relative',overflow:'hidden' },
     heroInner:   { maxWidth:640,margin:'0 auto',position:'relative',zIndex:1 },
     formTypePill:{ display:'inline-flex',alignItems:'center',gap:6,fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.8)',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.15)',padding:'6px 12px',borderRadius:99,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16 },
+    heroGreeting:{ fontSize:14,fontWeight:600,color:'rgba(255,255,255,0.85)',margin:'0 0 10px',letterSpacing:'0.01em' },
     heroTitle:   { fontSize:30,fontWeight:800,color:'#fff',letterSpacing:'-0.02em',lineHeight:1.2,margin:'0 0 10px' },
     heroDesc:    { fontSize:14,color:'rgba(255,255,255,0.7)',lineHeight:1.6,margin:0 },
     heroDots:    { position:'absolute',right:-40,top:-40,width:300,height:300,background:'radial-gradient(circle,rgba(99,102,241,0.3) 0%,transparent 70%)',borderRadius:'50%' },
@@ -301,7 +429,6 @@ const CSS = `
 input:focus, textarea:focus { border-color: #3b82f6 !important; background: #fff !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.08) !important; }
 button[type="submit"]:hover { transform: translateY(-1px) !important; box-shadow: 0 12px 32px rgba(59,130,246,0.45) !important; }
 button[type="submit"]:active { transform: translateY(0) !important; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 @media (max-width: 600px) {
   div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
 }

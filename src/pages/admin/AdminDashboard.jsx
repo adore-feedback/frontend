@@ -219,6 +219,7 @@ const AdminDashboard = () => {
                                         const sm = STATUS_META[form.status] || STATUS_META.draft;
                                         const isSelected = selectedFormId === id;
                                         const isHovered  = hoveredRow === id;
+                                        const isDraft    = form.status === 'draft';
                                         return (
                                             <tr key={id}
                                                 onClick={() => setSelectedFormId(id)}
@@ -253,6 +254,17 @@ const AdminDashboard = () => {
                                                 </td>
                                                 <td style={{...S.td,textAlign:'right'}}>
                                                     <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
+                                                        {/* Edit button — only for draft forms */}
+                                                        {isDraft && (
+                                                            <Link
+                                                                to={`/admin/forms/edit/${id}`}
+                                                                onClick={e => e.stopPropagation()}
+                                                                style={S.actionEdit}
+                                                                title="Continue editing this draft"
+                                                            >
+                                                                ✏️ Edit
+                                                            </Link>
+                                                        )}
                                                         <Link to={`/admin/result/${id}`} onClick={e=>e.stopPropagation()} style={S.actionView}>Results</Link>
                                                         <button onClick={e=>requestDelete(e,form)} style={S.actionDelete}>Delete</button>
                                                     </div>
@@ -287,6 +299,16 @@ const AdminDashboard = () => {
                                                 </span>
                                             </div>
                                         </div>
+                                        {/* Quick Edit shortcut in sidebar for drafts */}
+                                        {selectedForm.status === 'draft' && (
+                                            <Link
+                                                to={`/admin/forms/edit/${getFormId(selectedForm)}`}
+                                                style={S.sideEditBtn}
+                                                title="Continue editing"
+                                            >
+                                                ✏️ Edit Draft
+                                            </Link>
+                                        )}
                                     </div>
                                     <div style={S.divider}/>
                                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -392,13 +414,16 @@ const S = {
     formTitle:  { fontSize:13.5, fontWeight:700, color:'#0f172a', display:'block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:220 },
     formDesc:   { fontSize:11, color:'#94a3b8', marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:260 },
     statusBadge:{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 9px', borderRadius:6, fontSize:10, fontWeight:700, letterSpacing:'0.04em' },
-    actionView: { fontSize:11, fontWeight:700, color:'#2563eb', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:7, padding:'5px 10px', textDecoration:'none', letterSpacing:'0.04em', textTransform:'uppercase' },
-    actionDelete:{ fontSize:11, fontWeight:700, color:'#dc2626', background:'#fff5f5', border:'1px solid #fecaca', borderRadius:7, padding:'5px 10px', cursor:'pointer', letterSpacing:'0.04em', textTransform:'uppercase' },
+    // ── Action buttons ──
+    actionEdit:   { fontSize:11, fontWeight:700, color:'#d97706', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:7, padding:'5px 10px', textDecoration:'none', letterSpacing:'0.04em', textTransform:'uppercase' },
+    actionView:   { fontSize:11, fontWeight:700, color:'#2563eb', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:7, padding:'5px 10px', textDecoration:'none', letterSpacing:'0.04em', textTransform:'uppercase' },
+    actionDelete: { fontSize:11, fontWeight:700, color:'#dc2626', background:'#fff5f5', border:'1px solid #fecaca', borderRadius:7, padding:'5px 10px', cursor:'pointer', letterSpacing:'0.04em', textTransform:'uppercase' },
     emptyRow:   { textAlign:'center', color:'#94a3b8', fontSize:13, padding:40 },
     sidebar:    { display:'flex', flexDirection:'column', gap:14 },
     sideCard:   { background:'#fff', border:'1px solid #e8ecf0', borderRadius:14, padding:18, boxShadow:'0 1px 4px rgba(0,0,0,0.05)' },
     sideFormTitle:{ fontSize:15, fontWeight:800, color:'#0f172a', lineHeight:1.3 },
     sideCardTitle:{ display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:12, fontWeight:700, color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 },
+    sideEditBtn:{ fontSize:11, fontWeight:700, color:'#d97706', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'6px 12px', textDecoration:'none', whiteSpace:'nowrap', flexShrink:0 },
     divider:    { height:1, background:'#f1f5f9', margin:'14px 0' },
     miniStat:   { background:'#f8fafc', borderRadius:10, padding:'10px 12px', display:'flex', flexDirection:'column', gap:2 },
     miniVal:    { fontSize:18, fontWeight:800, color:'#0f172a', lineHeight:1 },

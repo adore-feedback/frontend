@@ -29,6 +29,12 @@ const request = async (path, options = {}) => {
 
 export const getForms = () => request('/forms');
 
+/**
+ * Get a single form by ID (admin, includes all fields).
+ */
+export const getForm = (formId) =>
+  request(`/forms/${encodeURIComponent(formId)}`);
+
 export const getFormResults = (formId, filters = {}) => {
   const params = new URLSearchParams();
 
@@ -46,6 +52,16 @@ export const getFormResults = (formId, filters = {}) => {
 export const createForm = (form) =>
   request('/forms', {
     method: 'POST',
+    body: JSON.stringify(form),
+  });
+
+/**
+ * Update an existing form (full or partial).
+ * Uses PATCH /api/forms/:formId
+ */
+export const updateForm = (formId, form) =>
+  request(`/forms/${encodeURIComponent(formId)}`, {
+    method: 'PATCH',
     body: JSON.stringify(form),
   });
 

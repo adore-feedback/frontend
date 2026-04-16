@@ -29,7 +29,10 @@ const App = () => {
 
         <Route path='/admin' element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
+          {/* Create new form */}
           <Route element={<FormCreator />} path='forms/new' />
+          {/* Edit an existing draft form — passes formId so FormCreator loads it */}
+          <Route element={<FormCreator />} path='forms/edit/:editFormId' />
           <Route element={<AdminResult />} path='result' />
           <Route element={<AdminResult />} path='result/:formId' />
         </Route>
