@@ -1,490 +1,310 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { getPublicForm, submitPublicFormResponse } from '../api/feedbackApi';
 
-/* ── Helpers ── */
 const getSentiment = (rating) => {
-  const v = Number(rating);
-  if (v >= 4) return 'positive';
-  if (v <= 2) return 'negative';
-  return 'neutral';
-};
-
-const isValidIndianMobile = (phone) => {
-  if (!phone) return true; // Allow empty if not required (handled by 'required' attribute)
-  return /^[789]\d{9}$/.test(phone);
+    const v = Number(rating);
+    return v >= 4 ? 'positive' : v <= 2 ? 'negative' : 'neutral';
 };
 
 const StarRating = ({ value, onChange }) => {
-  const [hovered, setHovered] = useState(0);
-  const current = hovered || Number(value) || 0;
-
-  return (
-    <div className="flex items-center gap-2 mt-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          className="transition-transform hover:scale-110 active:scale-95 focus:outline-none"
-          onMouseEnter={() => setHovered(star)}
-          onMouseLeave={() => setHovered(0)}
-          onClick={() => onChange(String(star))}
-        >
-          <span
-            className="material-symbols-outlined text-4xl transition-colors"
-            style={{
-              fontVariationSettings: star <= current ? "'FILL' 1" : "'FILL' 0",
-              color: star <= current ? 'var(--color-primary)' : 'var(--color-outline)',
-            }}
-          >
-            star
-          </span>
-        </button>
-      ))}
-      {value && (
-        <span className="ml-2 text-sm font-semibold text-secondary">
-          {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][Number(value)]}
-        </span>
-      )}
-    </div>
-  );
-};
-
-/* ── Access Gate (restricted form) ── */
-const AccessGate = ({ message, onAccess }) => {
-  const [fields, setFields] = useState({ email: '', phone: '', uniqueId: '' });
-
-  const [error, setError] = useState('');
-
-  const handleAccess = () => {
-    setError('');
-    if (fields.phone && !isValidIndianMobile(fields.phone)) {
-      setError('Please enter a valid 10-digit Indian mobile number starting with 7, 8, or 9.');
-      return;
-    }
-    onAccess(fields);
-  };
-
-  return (
-    <main className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-surface-container-lowest rounded-2xl p-10 shadow-xl shadow-primary/5 border border-outline-variant/20 animate-fade-in">
-        <div className="flex items-center justify-center w-14 h-14 rounded-full bg-primary-fixed-dim mb-6 mx-auto">
-          <span className="material-symbols-outlined text-primary text-3xl">lock</span>
-        </div>
-        <h1 className="font-headline text-2xl font-bold text-primary text-center mb-2">
-          Restricted Access
-        </h1>
-        <p className="text-secondary text-sm text-center leading-relaxed mb-8">
-          {message || 'This form is restricted. Enter your credentials to access it.'}
-        </p>
-        <div className="space-y-4">
-          <input
-            className="w-full rounded-xl bg-surface-container-low border border-outline-variant/30 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all placeholder:text-secondary/60"
-            placeholder="Email address"
-            type="email"
-            value={fields.email}
-            onChange={(e) => handleChange('email', e.target.value)}
-          />
-          <div className="space-y-1">
-            <input
-              className={`w-full rounded-xl bg-surface-container-low border px-4 py-3 text-sm outline-none transition-all placeholder:text-secondary/60 ${
-                fields.phone && !isValidIndianMobile(fields.phone)
-                  ? 'border-error focus:ring-error/25 focus:border-error/40'
-                  : 'border-outline-variant/30 focus:ring-primary/25 focus:border-primary/40'
-              }`}
-              placeholder="Phone number"
-              value={fields.phone}
-              onChange={(e) => handleChange('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
-            />
-            {fields.phone && !isValidIndianMobile(fields.phone) && (
-              <p className="text-[10px] text-error px-1 font-medium">Starts with 7, 8, or 9 (10 digits)</p>
-            )}
-          </div>
-          <input
-            className="w-full rounded-xl bg-surface-container-low border border-outline-variant/30 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all placeholder:text-secondary/60"
-            placeholder="Unique ID"
-            value={fields.uniqueId}
-            onChange={(e) => handleChange('uniqueId', e.target.value)}
-          />
-
-          {error && (
-            <div className="bg-error-container/40 text-on-error-container text-xs p-3 rounded-lg border border-error/10 flex items-start gap-2">
-              <span className="material-symbols-outlined text-xs mt-0.5">error</span>
-              {error}
+    const [hovered, setHovered] = useState(0);
+    const current = hovered || Number(value) || 0;
+    const LABELS  = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'];
+    return (
+        <div>
+            <div style={{display:'flex',alignItems:'center',gap:6,padding:'8px 0'}}>
+                {[1,2,3,4,5].map(star => (
+                    <button
+                        key={star} type="button"
+                        onMouseEnter={() => setHovered(star)}
+                        onMouseLeave={() => setHovered(0)}
+                        onClick={() => onChange(String(star))}
+                        style={{background:'none',border:'none',cursor:'pointer',padding:4,transition:'transform 0.15s',transform: star<=current?'scale(1.15)':'scale(1)'}}
+                    >
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill={star<=current?'#f59e0b':'none'} stroke={star<=current?'#f59e0b':'#d1d5db'} strokeWidth="1.5">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                    </button>
+                ))}
+                {current > 0 && (
+                    <span style={{fontSize:13,fontWeight:700,color:'#f59e0b',marginLeft:8}}>
+                        {LABELS[current]}
+                    </span>
+                )}
             </div>
-          )}
-
-          <button
-            className="w-full bg-primary text-on-primary font-semibold py-3 rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all mt-2"
-            type="button"
-            onClick={handleAccess}
-          >
-            Access Form
-          </button>
         </div>
-      </div>
-    </main>
-  );
+    );
 };
 
-/* ── Success Screen ── */
-const SuccessScreen = ({ formTitle }) => (
-  <main className="min-h-screen bg-background flex items-center justify-center p-6">
-    <div className="w-full max-w-md text-center animate-fade-in">
-      <div className="flex items-center justify-center w-20 h-20 rounded-full bg-tertiary-fixed mx-auto mb-6">
-        <span className="material-symbols-outlined text-on-tertiary-fixed text-5xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-          check_circle
-        </span>
-      </div>
-      <h1 className="font-headline text-3xl font-bold text-primary mb-3">
-        Thank you!
-      </h1>
-      <p className="text-secondary leading-relaxed mb-2">
-        Your feedback for <span className="font-semibold text-primary">{formTitle}</span> has been received.
-      </p>
-      <p className="text-secondary text-sm">
-        We appreciate you taking the time to share your thoughts.
-      </p>
-    </div>
-  </main>
-);
-
-/* ── Main Component ── */
 const PublicFeedbackForm = () => {
-  const { formId } = useParams();
-  const [form, setForm] = useState(null);
-  const [access, setAccess] = useState({ email: '', phone: '', uniqueId: '' });
-  const [respondent, setRespondent] = useState({
-    name: '', email: '', phone: '', uniqueId: '', companyName: '', companyDetails: '',
-  });
-  const [answers, setAnswers] = useState({});
-  const [status, setStatus] = useState({ type: '', message: '' });
-  const [isLoading, setIsLoading] = useState(true);
-  const [submitted, setSubmitted] = useState(false);
-  const [isRestricted, setIsRestricted] = useState(false);
+    const { formId } = useParams();
+    const [form, setForm]           = useState(null);
+    const [respondent, setRespondent] = useState({ name:'', email:'', phone:'', uniqueId:'', companyName:'', companyDetails:'' });
+    const [answers, setAnswers]     = useState({});
+    const [status, setStatus]       = useState({ type:'', message:'' });
+    const [isLoading, setIsLoading] = useState(true);
+    const [submitted, setSubmitted] = useState(false);
+    const [activeQ, setActiveQ]     = useState(null);
 
-  const loadForm = useCallback(async (accessValues = {}) => {
-    setIsLoading(true);
-    setStatus({ type: '', message: '' });
-    try {
-      const data = await getPublicForm(formId, accessValues);
-      setForm(data.form);
-      setIsRestricted(false);
-    } catch (error) {
-      setForm(null);
-      setStatus({ type: 'error', message: error.message });
-      setIsRestricted(true);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [formId]);
+    const loadForm = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const data = await getPublicForm(formId);
+            setForm(data.form);
+        } catch (err) { setStatus({ type:'error', message: err.message }); }
+        finally { setIsLoading(false); }
+    }, [formId]);
 
-  useEffect(() => { loadForm(); }, [loadForm]);
+    useEffect(() => { loadForm(); }, [loadForm]);
 
-  // Pre-fill from answer templates
-  useEffect(() => {
-    if (!form?.questions) return;
-    const templateAnswers = form.questions.reduce((res, q) => {
-      if (q.type === 'text' && q.answerTemplates?.[0]) res[q.id] = q.answerTemplates[0];
-      return res;
-    }, {});
-    setAnswers(templateAnswers);
-  }, [form]);
+    const ratingQ     = useMemo(() => form?.questions?.find(q => q.type === 'rating'), [form]);
+    const ratingValue = answers[ratingQ?.id] || null;
 
-  const ratingAnswer = useMemo(() => {
-    const ratingQ = form?.questions?.find((q) => q.type === 'rating');
-    return ratingQ ? answers[ratingQ.id] : null;
-  }, [answers, form]);
-
-  const updateAnswer = (q, val) =>
-    setAnswers((c) => ({ ...c, [q.id]: val }));
-
-  const toggleOption = (q, option) =>
-    setAnswers((c) => {
-      const cur = Array.isArray(c[q.id]) ? c[q.id] : [];
-      return { ...c, [q.id]: cur.includes(option) ? cur.filter((i) => i !== option) : [...cur, option] };
-    });
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus({ type: '', message: '' });
-
-    // Validate phone for Indian format
-    if (respondent.phone && !isValidIndianMobile(respondent.phone)) {
-      setStatus({ type: 'error', message: 'Please enter a valid 10-digit Indian mobile number.' });
-      return;
-    }
-
-    const payload = {
-      respondent,
-      rating: ratingAnswer || undefined,
-      sentiment: getSentiment(ratingAnswer),
-      answers: form.questions.map((q) => ({
-        questionId: q.id,
-        prompt: q.prompt,
-        type: q.type,
-        value: answers[q.id] ?? '',
-      })),
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const payload = {
+            respondent,
+            rating: ratingValue || undefined,
+            ...(ratingValue != null && ratingValue !== '' ? { sentiment: getSentiment(ratingValue) } : {}),
+            answers: form.questions.map(q => ({ questionId: q.id, prompt: q.prompt, type: q.type, value: answers[q.id] ?? '' })),
+        };
+        try {
+            await submitPublicFormResponse(form.id || form.slug, payload);
+            setSubmitted(true);
+        } catch (err) { setStatus({ type:'error', message: err.message }); }
     };
 
-    try {
-      await submitPublicFormResponse(form.id || form.slug, payload);
-      setSubmitted(true);
-    } catch (error) {
-      setStatus({ type: 'error', message: error.message });
-    }
-  };
-
-  /* ── Loading ── */
-  if (isLoading) {
-    return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 text-secondary">
-          <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-          <p className="text-sm font-medium">Loading form...</p>
+    if (isLoading) return (
+        <div style={S.loadWrap}>
+            <style>{CSS}</style>
+            <div style={S.loadRing}/>
+            <p style={S.loadText}>Loading Form…</p>
         </div>
-      </main>
     );
-  }
 
-  /* ── Access Gate ── */
-  if (!form && isRestricted) {
-    return <AccessGate message={status.message} onAccess={loadForm} />;
-  }
-
-  /* ── Success ── */
-  if (submitted) {
-    return <SuccessScreen formTitle={form?.title} />;
-  }
-
-  if (!form) return null;
-
-  return (
-    <main className="min-h-screen bg-background">
-      {/* ── Header band ── */}
-      <div className="bg-gradient-to-r from-primary to-primary-container px-6 py-10 md:py-16">
-        <div className="max-w-2xl mx-auto">
-          <span className="inline-block text-xs font-bold uppercase tracking-widest text-on-primary/70 bg-white/10 px-3 py-1 rounded-full mb-4">
-            {form.formTypeLabel || form.formType}
-          </span>
-          <h1 className="font-headline text-3xl md:text-4xl font-extrabold text-on-primary leading-tight">
-            {form.title}
-          </h1>
-          {form.description && (
-            <p className="mt-3 text-on-primary/80 leading-relaxed text-sm md:text-base">
-              {form.description}
-            </p>
-          )}
+    if (submitted) return (
+        <div style={S.successWrap}>
+            <style>{CSS}</style>
+            <div style={S.successCard}>
+                <div style={S.successIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                </div>
+                <h1 style={S.successTitle}>Thank you!</h1>
+                <p style={S.successDesc}>
+                    Your feedback for <strong style={{color:'#3b82f6'}}>{form?.title}</strong> has been securely recorded.
+                </p>
+                <div style={S.successDivider}/>
+                <p style={{fontSize:12,color:'#94a3b8',margin:0}}>You may close this window.</p>
+            </div>
         </div>
-      </div>
+    );
 
-      {/* ── Form body ── */}
-      <div className="max-w-2xl mx-auto px-4 py-10 pb-20">
-        <form className="space-y-6" onSubmit={handleSubmit}>
-
-          {/* ── Respondent Info ── */}
-          <section className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/15 space-y-4">
-            <h2 className="font-headline text-base font-bold text-primary">Your Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                className="rounded-xl bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all placeholder:text-secondary/60"
-                placeholder="Full name *"
-                required
-                value={respondent.name}
-                onChange={(e) => setRespondent((c) => ({ ...c, name: e.target.value }))}
-              />
-              <input
-                className="rounded-xl bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all placeholder:text-secondary/60"
-                placeholder="Email address"
-                type="email"
-                value={respondent.email}
-                onChange={(e) => setRespondent((c) => ({ ...c, email: e.target.value }))}
-              />
-              {form.collectsPhone && (
-                <div className="space-y-1">
-                  <input
-                    className={`w-full rounded-xl bg-surface-container-low border px-4 py-3 text-sm outline-none transition-all placeholder:text-secondary/60 ${
-                      respondent.phone && !isValidIndianMobile(respondent.phone)
-                        ? 'border-error focus:ring-error/25 focus:border-error/40'
-                        : 'border-outline-variant/20 focus:ring-primary/25 focus:border-primary/40'
-                    }`}
-                    placeholder={form.phoneRequired ? 'Phone number *' : 'Phone number (optional)'}
-                    required={form.phoneRequired}
-                    value={respondent.phone}
-                    onChange={(e) => setRespondent((c) => ({ ...c, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                  />
-                  {respondent.phone && !isValidIndianMobile(respondent.phone) && (
-                    <p className="text-[10px] text-error px-1 font-medium italic">Enter 10-digit mobile number starting with 7, 8, or 9</p>
-                  )}
-                </div>
-              )}
-              <input
-                className="rounded-xl bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all placeholder:text-secondary/60"
-                placeholder="Unique ID (optional)"
-                value={respondent.uniqueId}
-                onChange={(e) => setRespondent((c) => ({ ...c, uniqueId: e.target.value }))}
-              />
-              {form.collectsCompanyDetails && (
-                <>
-                  <input
-                    className="rounded-xl bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all placeholder:text-secondary/60"
-                    placeholder={form.companyDetailsRequired ? 'Company name *' : 'Company name (optional)'}
-                    required={form.companyDetailsRequired}
-                    value={respondent.companyName}
-                    onChange={(e) => setRespondent((c) => ({ ...c, companyName: e.target.value }))}
-                  />
-                  <input
-                    className="rounded-xl bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all placeholder:text-secondary/60"
-                    placeholder={form.companyDetailsRequired ? 'Company details *' : 'Company details (optional)'}
-                    required={form.companyDetailsRequired}
-                    value={respondent.companyDetails}
-                    onChange={(e) => setRespondent((c) => ({ ...c, companyDetails: e.target.value }))}
-                  />
-                </>
-              )}
+    if (!form) return (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',fontFamily:"'DM Sans',system-ui"}}>
+            <style>{CSS}</style>
+            <div style={{textAlign:'center',padding:40}}>
+                <span style={{fontSize:48}}>❌</span>
+                <p style={{fontSize:16,fontWeight:700,color:'#ef4444',marginTop:12}}>{status.message || 'Form not found.'}</p>
             </div>
-          </section>
+        </div>
+    );
 
-          {/* ── Questions ── */}
-          <section className="space-y-4">
-            {form.questions.map((q, idx) => (
-              <div
-                key={q.id}
-                className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/15 space-y-3 transition-shadow hover:shadow-sm"
-              >
-                <div className="flex items-start gap-2">
-                  <span className="flex-shrink-0 h-6 w-6 rounded-full bg-primary-fixed-dim flex items-center justify-center text-primary text-xs font-bold">
-                    {idx + 1}
-                  </span>
-                  <label className="font-semibold text-on-surface text-sm leading-relaxed">
-                    {q.prompt}
-                    {q.required && <span className="text-error ml-1">*</span>}
-                  </label>
+    const FORM_TYPE_ICONS = { webinar:'🎙️', flash:'⚡', survey:'📊', default:'📋' };
+    const typeIcon = FORM_TYPE_ICONS[form.formType] || FORM_TYPE_ICONS.default;
+
+    return (
+        <main style={S.main}>
+            <style>{CSS}</style>
+
+            {/* Hero Header */}
+            <div style={S.hero}>
+                <div style={S.heroInner}>
+                    <div style={S.formTypePill}>
+                        <span>{typeIcon}</span>
+                        <span>{form.formType || 'Feedback Form'}</span>
+                    </div>
+                    <h1 style={S.heroTitle}>{form.title}</h1>
+                    {form.description && <p style={S.heroDesc}>{form.description}</p>}
                 </div>
+                {/* Decorative dots */}
+                <div style={S.heroDots}/>
+            </div>
 
-                {/* Rating */}
-                {q.type === 'rating' && (
-                  <StarRating
-                    value={answers[q.id] || ''}
-                    onChange={(val) => updateAnswer(q, val)}
-                  />
-                )}
+            {/* Progress hint */}
+            <div style={{background:'#fff',borderBottom:'1px solid #e8ecf0'}}>
+                <div style={{maxWidth:680,margin:'0 auto',padding:'10px 20px',display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{height:3,flex:1,background:'#e8ecf0',borderRadius:999,overflow:'hidden'}}>
+                        <div style={{height:'100%',width:'20%',background:'linear-gradient(90deg,#3b82f6,#6366f1)',borderRadius:999}}/>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:600,color:'#94a3b8',whiteSpace:'nowrap'}}>Secure · Confidential</span>
+                </div>
+            </div>
 
-                {/* Text */}
-                {q.type === 'text' && (
-                  <div className="space-y-2">
-                    {q.answerTemplates?.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {q.answerTemplates.map((tmpl) => (
-                          <button
-                            key={tmpl}
-                            type="button"
-                            className="bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 active:scale-95 transition-all"
-                            onClick={() => updateAnswer(q, tmpl)}
-                          >
-                            {tmpl}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <textarea
-                      className="w-full min-h-24 rounded-xl bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-all resize-none"
-                      required={q.required}
-                      value={answers[q.id] || ''}
-                      onChange={(e) => updateAnswer(q, e.target.value)}
-                    />
-                  </div>
-                )}
+            <div style={S.formWrap}>
+                <form style={{display:'flex',flexDirection:'column',gap:16}} onSubmit={handleSubmit}>
 
-                {/* Single choice */}
-                {q.type === 'single-choice' && (
-                  <div className="flex flex-col gap-2 mt-1">
-                    {(q.options || []).map((option) => (
-                      <label
-                        key={option}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all text-sm font-medium ${
-                          answers[q.id] === option
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-outline-variant/25 bg-surface-container-low text-secondary hover:border-primary/30 hover:bg-primary/3'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={q.id}
-                          value={option}
-                          checked={answers[q.id] === option}
-                          onChange={() => updateAnswer(q, option)}
-                          className="accent-primary"
-                          required={q.required}
-                        />
-                        {option}
-                      </label>
+                    {/* Participant Card */}
+                    <div style={S.card}>
+                        <div style={S.cardHeader}>
+                            <span style={S.cardIcon}>👤</span>
+                            <h2 style={S.cardTitle}>Participant Details</h2>
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                            <div style={S.inputWrap}>
+                                <label style={S.inputLabel}>Full Name <span style={{color:'#ef4444'}}>*</span></label>
+                                <input style={S.input} required placeholder="Your full name" value={respondent.name} onChange={e => setRespondent({...respondent,name:e.target.value})}/>
+                            </div>
+                            <div style={S.inputWrap}>
+                                <label style={S.inputLabel}>Email Address</label>
+                                <input style={S.input} type="email" placeholder="you@example.com" value={respondent.email} onChange={e => setRespondent({...respondent,email:e.target.value})}/>
+                            </div>
+                            {form.collectsPhone && (
+                                <div style={S.inputWrap}>
+                                    <label style={S.inputLabel}>Phone {form.phoneRequired && <span style={{color:'#ef4444'}}>*</span>}</label>
+                                    <input style={S.input} type="tel" placeholder="+1 (555) 000-0000" required={form.phoneRequired} value={respondent.phone} onChange={e => setRespondent({...respondent,phone:e.target.value})}/>
+                                </div>
+                            )}
+                            {form.collectsCompanyDetails && (
+                                <div style={S.inputWrap}>
+                                    <label style={S.inputLabel}>Company Name {form.companyDetailsRequired && <span style={{color:'#ef4444'}}>*</span>}</label>
+                                    <input style={S.input} placeholder="Your organization" required={form.companyDetailsRequired} value={respondent.companyName} onChange={e => setRespondent({...respondent,companyName:e.target.value})}/>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Questions */}
+                    {form.questions.map((q, idx) => (
+                        <div key={q.id} style={{...S.card, ...(activeQ===q.id?S.cardFocused:{})}} onClick={() => setActiveQ(q.id)}>
+                            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+                                <div style={S.qNum}>{idx + 1}</div>
+                                <label style={S.qPrompt}>
+                                    {q.prompt}
+                                    {q.required && <span style={{color:'#ef4444',marginLeft:4}}>*</span>}
+                                </label>
+                            </div>
+
+                            {q.type === 'rating' && (
+                                <StarRating value={answers[q.id]||''} onChange={val => setAnswers({...answers,[q.id]:val})}/>
+                            )}
+
+                            {q.type === 'text' && (
+                                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                                    <textarea
+                                        style={S.textarea}
+                                        required={q.required}
+                                        value={answers[q.id]||''}
+                                        onChange={e => setAnswers({...answers,[q.id]:e.target.value})}
+                                        placeholder="Share your thoughts…"
+                                    />
+                                    {q.answerTemplates?.length > 0 && (
+                                        <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                                            <span style={{fontSize:10,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',alignSelf:'center',marginRight:4}}>Templates:</span>
+                                            {q.answerTemplates.slice(0,3).map(t => (
+                                                <button key={t} type="button" onClick={() => setAnswers({...answers,[q.id]:t})} style={S.templateBtn}>
+                                                    {t}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {q.type === 'single-choice' && (
+                                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                                    {(q.options||[]).map(opt => (
+                                        <label key={opt} style={{
+                                            ...S.choiceLabel,
+                                            ...(answers[q.id]===opt ? S.choiceLabelSelected : {}),
+                                        }}>
+                                            <div style={{
+                                                ...S.choiceCircle,
+                                                ...(answers[q.id]===opt ? S.choiceCircleSelected : {}),
+                                            }}>
+                                                {answers[q.id]===opt && <div style={{width:8,height:8,borderRadius:'50%',background:'#fff'}}/>}
+                                            </div>
+                                            <input type="radio" className="sr-only" checked={answers[q.id]===opt} onChange={() => setAnswers({...answers,[q.id]:opt})} style={{display:'none'}}/>
+                                            <span style={{fontSize:13,fontWeight:answers[q.id]===opt?700:500}}>{opt}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     ))}
-                  </div>
-                )}
 
-                {/* Multiple choice */}
-                {q.type === 'multiple-choice' && (
-                  <div className="flex flex-col gap-2 mt-1">
-                    {(q.options || []).map((option) => {
-                      const checked = Array.isArray(answers[q.id]) && answers[q.id].includes(option);
-                      return (
-                        <label
-                          key={option}
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all text-sm font-medium ${
-                            checked
-                              ? 'border-primary bg-primary/5 text-primary'
-                              : 'border-outline-variant/25 bg-surface-container-low text-secondary hover:border-primary/30'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleOption(q, option)}
-                            className="accent-primary"
-                          />
-                          {option}
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
-          </section>
+                    {/* Error */}
+                    {status.type === 'error' && (
+                        <div style={{background:'#fff5f5',border:'1px solid #fecaca',borderRadius:12,padding:'14px 16px',display:'flex',gap:10,alignItems:'center'}}>
+                            <span style={{fontSize:18}}>⚠️</span>
+                            <p style={{fontSize:13,color:'#dc2626',fontWeight:600,margin:0}}>{status.message}</p>
+                        </div>
+                    )}
 
-          {/* ── Status message ── */}
-          {status.message && (
-            <div
-              className={`rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 ${
-                status.type === 'error'
-                  ? 'bg-error-container text-on-error-container'
-                  : 'bg-tertiary-fixed text-on-tertiary-fixed'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                {status.type === 'error' ? 'error' : 'check_circle'}
-              </span>
-              {status.message}
+                    {/* Submit */}
+                    <button type="submit" style={S.submitBtn}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        Submit Feedback
+                    </button>
+
+                    <p style={{textAlign:'center',fontSize:10,color:'#94a3b8',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',margin:0}}>
+                        🔒 Verified · Secure · Powered by Simtrak Feedback Hub
+                    </p>
+                </form>
             </div>
-          )}
-
-          {/* ── Submit ── */}
-          <button
-            className="w-full bg-primary text-on-primary py-4 rounded-xl font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
-            type="submit"
-          >
-            <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
-            Submit Feedback
-          </button>
-
-          <p className="text-center text-xs text-secondary/50">
-            Your response is confidential and will only be used to improve our services.
-          </p>
-        </form>
-      </div>
-    </main>
-  );
+        </main>
+    );
 };
+
+const S = {
+    main:        { minHeight:'100vh', background:'#f8fafc', fontFamily:"'DM Sans', system-ui, sans-serif", paddingBottom:60 },
+    loadWrap:    { display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',gap:16 },
+    loadRing:    { width:40,height:40,border:'3px solid #e8ecf0',borderTopColor:'#3b82f6',borderRadius:'50%',animation:'spin 0.7s linear infinite' },
+    loadText:    { fontSize:12,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.1em' },
+    successWrap: { display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'linear-gradient(135deg,#f8fafc,#eff6ff)',padding:20,fontFamily:"'DM Sans',system-ui" },
+    successCard: { background:'#fff',borderRadius:20,padding:'48px 40px',textAlign:'center',maxWidth:440,boxShadow:'0 20px 60px rgba(59,130,246,0.12)',border:'1px solid #e8ecf0' },
+    successIcon: { width:72,height:72,borderRadius:20,background:'linear-gradient(135deg,#10b981,#059669)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px',boxShadow:'0 8px 24px rgba(16,185,129,0.35)' },
+    successTitle:{ fontSize:28,fontWeight:800,color:'#0f172a',margin:'0 0 8px',letterSpacing:'-0.02em' },
+    successDesc: { fontSize:14,color:'#64748b',lineHeight:1.6,margin:'0 0 20px' },
+    successDivider:{ height:1,background:'#f1f5f9',margin:'20px 0' },
+    hero:        { background:'linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1d4ed8 100%)',padding:'60px 20px',position:'relative',overflow:'hidden' },
+    heroInner:   { maxWidth:640,margin:'0 auto',position:'relative',zIndex:1 },
+    formTypePill:{ display:'inline-flex',alignItems:'center',gap:6,fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.8)',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.15)',padding:'6px 12px',borderRadius:99,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16 },
+    heroTitle:   { fontSize:30,fontWeight:800,color:'#fff',letterSpacing:'-0.02em',lineHeight:1.2,margin:'0 0 10px' },
+    heroDesc:    { fontSize:14,color:'rgba(255,255,255,0.7)',lineHeight:1.6,margin:0 },
+    heroDots:    { position:'absolute',right:-40,top:-40,width:300,height:300,background:'radial-gradient(circle,rgba(99,102,241,0.3) 0%,transparent 70%)',borderRadius:'50%' },
+    formWrap:    { maxWidth:680,margin:'0 auto',padding:'24px 20px' },
+    card:        { background:'#fff',borderRadius:14,border:'1px solid #e8ecf0',padding:'22px 24px',boxShadow:'0 1px 4px rgba(0,0,0,0.05)',transition:'border-color 0.2s, box-shadow 0.2s',cursor:'default' },
+    cardFocused: { borderColor:'#3b82f6',boxShadow:'0 0 0 3px rgba(59,130,246,0.1)' },
+    cardHeader:  { display:'flex',alignItems:'center',gap:10,marginBottom:18 },
+    cardIcon:    { fontSize:20 },
+    cardTitle:   { fontSize:13,fontWeight:700,color:'#0f172a',textTransform:'uppercase',letterSpacing:'0.06em',margin:0 },
+    inputWrap:   { display:'flex',flexDirection:'column',gap:6 },
+    inputLabel:  { fontSize:10,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.07em' },
+    input:       { width:'100%',background:'#f8fafc',border:'1.5px solid #e8ecf0',borderRadius:9,padding:'10px 14px',fontSize:13,color:'#0f172a',outline:'none',transition:'border 0.15s, background 0.15s',boxSizing:'border-box',fontFamily:"'DM Sans',system-ui" },
+    qNum:        { width:26,height:26,borderRadius:8,background:'#0f172a',color:'#fff',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 },
+    qPrompt:     { fontSize:14,fontWeight:700,color:'#0f172a',lineHeight:1.4 },
+    textarea:    { width:'100%',minHeight:100,background:'#f8fafc',border:'1.5px solid #e8ecf0',borderRadius:9,padding:'12px 14px',fontSize:13,color:'#0f172a',outline:'none',resize:'vertical',fontFamily:"'DM Sans',system-ui",lineHeight:1.6,boxSizing:'border-box' },
+    templateBtn: { fontSize:11,fontWeight:600,color:'#475569',background:'#f1f5f9',border:'1px solid #e8ecf0',borderRadius:99,padding:'5px 12px',cursor:'pointer',transition:'all 0.15s' },
+    choiceLabel: { display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderRadius:10,border:'1.5px solid #e8ecf0',cursor:'pointer',transition:'all 0.15s',background:'#fafbfc' },
+    choiceLabelSelected:{ borderColor:'#3b82f6',background:'#eff6ff',color:'#1d4ed8' },
+    choiceCircle:{ width:20,height:20,borderRadius:'50%',border:'2px solid #e8ecf0',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' },
+    choiceCircleSelected:{ border:'2px solid #3b82f6',background:'#3b82f6' },
+    submitBtn:   { display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',padding:'16px',background:'linear-gradient(135deg,#1e3a8a,#3b82f6)',color:'#fff',border:'none',borderRadius:14,fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:'0.02em',textTransform:'uppercase',boxShadow:'0 8px 24px rgba(59,130,246,0.35)',transition:'transform 0.15s, box-shadow 0.15s' },
+};
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+@keyframes spin { to { transform: rotate(360deg); } }
+input:focus, textarea:focus { border-color: #3b82f6 !important; background: #fff !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.08) !important; }
+button[type="submit"]:hover { transform: translateY(-1px) !important; box-shadow: 0 12px 32px rgba(59,130,246,0.45) !important; }
+button[type="submit"]:active { transform: translateY(0) !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+@media (max-width: 600px) {
+  div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+}
+`;
 
 export default PublicFeedbackForm;

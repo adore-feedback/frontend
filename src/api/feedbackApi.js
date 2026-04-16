@@ -5,7 +5,6 @@ const getUserId = () => {
   if (typeof window === 'undefined') {
     return DEFAULT_USER_ID;
   }
-
   return window.localStorage.getItem('adoreUserId') || DEFAULT_USER_ID;
 };
 
@@ -68,4 +67,13 @@ export const submitPublicFormResponse = (formId, payload) =>
   request(`/forms/public/${encodeURIComponent(formId)}/responses`, {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+
+/**
+ * Deletes a specific form by ID.
+ * Method: DELETE
+ */
+export const deleteForm = (formId) =>
+  request(`/forms/${encodeURIComponent(formId)}`, {
+    method: 'DELETE',
   });
