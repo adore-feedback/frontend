@@ -83,7 +83,7 @@ const Navbar = () => {
             Feedback Portal
           </span>
 
-          <span className="block text-[12px] font-bold text-slate-400 uppercase tracking-wider mt-[2px]">
+          <span className="block text-[12px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
             Simtrak Solutions
           </span>
 

@@ -462,17 +462,20 @@ const FormCreator = () => {
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
   /* ── Build API payload ── */
-  const buildPayload = (overrideStatus) => ({
+  const buildPayload = () => ({
     ...form,
-    status: overrideStatus || form.status,
-    allowedRespondents: allowedRespondents,
+
+    // ❌ REMOVE SETTINGS FROM HERE
+    status: undefined,
+    visibility: undefined,
+    slug: undefined,
+    allowedRespondents: undefined,
+    availability: undefined,
+    duplicateCheckFields: undefined,
+
+    // ✅ KEEP THESE
     personalizations: form.personalizations,
-    availability: {
-      opensAt: form.opensAt || undefined,
-      closesAt: form.closesAt || undefined,
-      singleSession: form.singleSession,
-      sessionKey: form.sessionKey,
-    },
+
     questions: form.questions.map((q) => ({
       ...q,
       options: splitList(q.optionsText),
@@ -483,7 +486,7 @@ const FormCreator = () => {
   /* ── Save as Draft (to server) ── */
   const saveDraftToServer = async () => {
     setIsSaving(true);
-    const payload = buildPayload("draft");
+    const payload = buildPayload();
     try {
       let data;
       if (savedFormId) {
@@ -517,7 +520,7 @@ const FormCreator = () => {
     try {
       let data;
       if (savedFormId) {
-        data = await updateForm(savedFormId, { ...payload, status: "live" });
+        data = await updateForm(savedFormId, payload);
       } else {
         data = await createForm({ ...payload, status: "live" });
       }
@@ -772,492 +775,507 @@ const FormCreator = () => {
             </div>
           )}
 
-          {activeSection !== 'done' && (
-          <form id="creator-form" onSubmit={submitForm}>
-            {/* ── Section: General Info ── */}
-            {activeSection === "info" && (
-              <div className="fc-section">
-                <div className="fc-section-header">
-                  <h2 className="fc-section-title">General Information</h2>
-                  <p className="fc-section-desc">
-                    Set up the basic details for your form
-                  </p>
-                </div>
-                <div className="fc-field-grid">
-                  <div className="fc-field">
-                    <label className="fc-label">
-                      Form Title <span className="fc-req">*</span>
-                    </label>
-                    <input
-                      className="fc-input"
-                      required
-                      value={form.title}
-                      onChange={(e) => updateField("title", e.target.value)}
-                      placeholder="e.g. Post-Webinar Feedback 2025"
-                    />
+          {activeSection !== "done" && (
+            <form id="creator-form" onSubmit={submitForm}>
+              {/* ── Section: General Info ── */}
+              {activeSection === "info" && (
+                <div className="fc-section">
+                  <div className="fc-section-header">
+                    <h2 className="fc-section-title">General Information</h2>
+                    <p className="fc-section-desc">
+                      Set up the basic details for your form
+                    </p>
                   </div>
-                  <div className="fc-field">
-                    <label className="fc-label">
-                      Form Type <span className="fc-req">*</span>
-                    </label>
-                    <select
-                      className="fc-input"
-                      required
-                      value={form.formType}
-                      onChange={(e) => updateField("formType", e.target.value)}
-                    >
-                      <option value="">Select a type…</option>
-                      <option value="webinar">🎙️ Webinar Form</option>
-                      <option value="flash">⚡ Flash Form</option>
-                      <option value="survey">📊 Survey</option>
-                      <option value="event">🎫 Event Feedback</option>
-                    </select>
-                  </div>
-                  <div className="fc-field fc-field--full">
-                    <label className="fc-label">Description</label>
-                    <textarea
-                      className="fc-input fc-textarea"
-                      value={form.description}
-                      onChange={(e) =>
-                        updateField("description", e.target.value)
-                      }
-                      placeholder="Briefly describe the purpose of this form…"
-                    />
-                  </div>
-                </div>
-
-                <div className="fc-divider" />
-                <p className="fc-sub-label">Data Collection</p>
-                <div className="fc-chip-row">
-                  {[
-                    ["collectsPhone", "📱 Collect Phone"],
-                    ["phoneRequired", "🔒 Phone Required"],
-                    ["collectsCompanyDetails", "🏢 Company Details"],
-                    ["singleSession", "🔐 Single Session"],
-                  ].map(([key, lbl]) => (
-                    <button
-                      type="button"
-                      key={key}
-                      onClick={() => updateField(key, !form[key])}
-                      className={`fc-chip ${form[key] ? "fc-chip--on" : ""}`}
-                    >
-                      {lbl}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="fc-nav-row">
-                  <span />
-                  <button
-                    type="button"
-                    className="fc-next-btn"
-                    onClick={() => setActiveSection("settings")}
-                  >
-                    Next: Settings
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                    >
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── Section: Settings ── */}
-            {activeSection === "settings" && (
-              <div className="fc-section">
-                <div className="fc-section-header">
-                  <h2 className="fc-section-title">Form Settings</h2>
-                  <p className="fc-section-desc">
-                    Configure availability, access, and restrictions
-                  </p>
-                </div>
-                <div className="fc-field-grid">
-                  <div className="fc-field">
-                    <label className="fc-label">Initial Status</label>
-                    <select
-                      className="fc-input"
-                      value={form.status}
-                      onChange={(e) => updateField("status", e.target.value)}
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="live">Live</option>
-                      <option value="closed">Closed</option>
-                    </select>
-                  </div>
-                  <div className="fc-field">
-                    <label className="fc-label">Visibility</label>
-                    <select
-                      className="fc-input"
-                      value={form.visibility}
-                      onChange={(e) =>
-                        updateField("visibility", e.target.value)
-                      }
-                    >
-                      <option value="public">🌐 Public Link</option>
-                      <option value="restricted">🔒 Restricted Users</option>
-                    </select>
-                  </div>
-                  <div className="fc-field">
-                    <label className="fc-label">Opens At</label>
-                    <input
-                      className="fc-input"
-                      type="datetime-local"
-                      value={form.opensAt}
-                      onChange={(e) => updateField("opensAt", e.target.value)}
-                    />
-                  </div>
-                  <div className="fc-field">
-                    <label className="fc-label">
-                      Closes At <span className="fc-req">*</span>
-                    </label>
-                    <input
-                      className="fc-input"
-                      type="datetime-local"
-                      required
-                      value={form.closesAt}
-                      onChange={(e) => updateField("closesAt", e.target.value)}
-                    />
-                  </div>
-                  {form.visibility === "restricted" && (
-                    <div className="fc-field fc-field--full">
+                  <div className="fc-field-grid">
+                    <div className="fc-field">
                       <label className="fc-label">
-                        Allowed Respondents{" "}
-                        <span className="fc-hint">
-                          (comma-separated emails or IDs)
-                        </span>
+                        Form Title <span className="fc-req">*</span>
                       </label>
-                      <textarea
-                        className="fc-input fc-textarea"
-                        style={{ height: 68 }}
-                        placeholder="user1@example.com, user2@example.com"
-                        value={form.allowedRespondentsText}
-                        onChange={(e) =>
-                          updateField("allowedRespondentsText", e.target.value)
-                        }
+                      <input
+                        className="fc-input"
+                        required
+                        value={form.title}
+                        onChange={(e) => updateField("title", e.target.value)}
+                        placeholder="e.g. Post-Webinar Feedback 2025"
                       />
                     </div>
-                  )}
-                </div>
-
-                {/* Personalization — only for restricted forms */}
-                {form.visibility === "restricted" && (
-                  <>
-                    <div className="fc-divider" />
-                    <div className="fc-personalization-header">
-                      <p className="fc-sub-label" style={{ margin: 0 }}>
-                        Personalization
-                      </p>
-                      <span className="fc-badge-info">Restricted only</span>
+                    <div className="fc-field">
+                      <label className="fc-label">
+                        Form Type <span className="fc-req">*</span>
+                      </label>
+                      <select
+                        className="fc-input"
+                        required
+                        value={form.formType}
+                        onChange={(e) =>
+                          updateField("formType", e.target.value)
+                        }
+                      >
+                        <option value="">Select a type…</option>
+                        <option value="webinar">🎙️ Webinar Form</option>
+                        <option value="flash">⚡ Flash Form</option>
+                        <option value="survey">📊 Survey</option>
+                        <option value="event">🎫 Event Feedback</option>
+                      </select>
                     </div>
-                    <p className="fc-personalization-hint">
-                      Pre-fill greeting names and company details per
-                      respondent. After publishing, you'll get unique links like{" "}
-                      <code>?name=John&amp;email=…</code> for each person.
-                    </p>
-                    <PersonalizationEditor
-                      respondents={allowedRespondents}
-                      personalizations={form.personalizations}
-                      onChange={(v) => updateField("personalizations", v)}
-                    />
-                  </>
-                )}
+                    <div className="fc-field fc-field--full">
+                      <label className="fc-label">Description</label>
+                      <textarea
+                        className="fc-input fc-textarea"
+                        value={form.description}
+                        onChange={(e) =>
+                          updateField("description", e.target.value)
+                        }
+                        placeholder="Briefly describe the purpose of this form…"
+                      />
+                    </div>
+                  </div>
 
-                <div className="fc-divider" />
-                <p className="fc-sub-label">Duplicate Submission Prevention</p>
-                <div className="fc-chip-row">
-                  {[
-                    ["email", "📧 Email"],
-                    ["phone", "📱 Phone"],
-                    ["uniqueId", "🆔 Unique ID"],
-                  ].map(([f, lbl]) => {
-                    const on = form.duplicateCheckFields.includes(f);
-                    return (
+                  <div className="fc-divider" />
+                  <p className="fc-sub-label">Data Collection</p>
+                  <div className="fc-chip-row">
+                    {[
+                      ["collectsPhone", "📱 Collect Phone"],
+                      ["phoneRequired", "🔒 Phone Required"],
+                      ["collectsCompanyDetails", "🏢 Company Details"],
+                      ["singleSession", "🔐 Single Session"],
+                    ].map(([key, lbl]) => (
                       <button
                         type="button"
-                        key={f}
-                        onClick={() => {
-                          const fields = on
-                            ? form.duplicateCheckFields.filter((x) => x !== f)
-                            : [...form.duplicateCheckFields, f];
-                          updateField("duplicateCheckFields", fields);
-                        }}
-                        className={`fc-chip ${on ? "fc-chip--on" : ""}`}
+                        key={key}
+                        onClick={() => updateField(key, !form[key])}
+                        className={`fc-chip ${form[key] ? "fc-chip--on" : ""}`}
                       >
                         {lbl}
                       </button>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
 
-                <div className="fc-nav-row">
-                  <button
-                    type="button"
-                    className="fc-ghost-btn"
-                    onClick={() => setActiveSection("info")}
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    type="button"
-                    className="fc-next-btn"
-                    onClick={() => setActiveSection("questions")}
-                  >
-                    Next: Questions
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
+                  <div className="fc-nav-row">
+                    <span />
+                    <button
+                      type="button"
+                      className="fc-next-btn"
+                      onClick={() => setActiveSection("settings")}
                     >
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </button>
+                      Next: Settings
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* ── Section: Questions ── */}
-            {activeSection === "questions" && (
-              <div className="fc-section">
-                <div className="fc-section-header">
-                  <div>
-                    <h2 className="fc-section-title">Form Questions</h2>
+              {/* ── Section: Settings ── */}
+              {activeSection === "settings" && (
+                <div className="fc-section">
+                  <div className="fc-section-header">
+                    <h2 className="fc-section-title">Form Settings</h2>
                     <p className="fc-section-desc">
-                      {form.questions.length} question
-                      {form.questions.length !== 1 ? "s" : ""} added
+                      Configure availability, access, and restrictions
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="fc-add-q-btn"
-                    onClick={addQuestion}
-                  >
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                    >
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Add Question
-                  </button>
-                </div>
-
-                {/* Quick templates */}
-                <div className="fc-template-row">
-                  <span className="fc-template-label">Templates:</span>
-                  {QUESTION_TEMPLATES.map((t) => (
-                    <button
-                      key={t.label}
-                      type="button"
-                      className="fc-template-chip"
-                      onClick={() => addTemplate(t)}
-                    >
-                      + {t.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="fc-q-list">
-                  {form.questions.map((q, idx) => (
-                    <div key={idx} className="fc-q-card">
-                      <div className="fc-q-head">
-                        <div className="fc-q-meta">
-                          <span className="fc-q-num">{idx + 1}</span>
-                          <span style={{ fontSize: 15 }}>
-                            {QTYPE_ICONS[q.type] || "❓"}
-                          </span>
-                          <span className="fc-q-type-label">{q.type}</span>
-                        </div>
-                        <div className="fc-q-controls">
-                          <button
-                            type="button"
-                            className="fc-q-icon-btn"
-                            onClick={() => moveQuestion(idx, -1)}
-                            disabled={idx === 0}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="fc-q-icon-btn"
-                            onClick={() => moveQuestion(idx, 1)}
-                            disabled={idx === form.questions.length - 1}
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            className="fc-q-icon-btn fc-q-icon-btn--danger"
-                            onClick={() => removeQuestion(idx)}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                      <div className="fc-q-body">
-                        <div className="fc-q-prompt-wrap">
-                          <label className="fc-label">
-                            Question Prompt <span className="fc-req">*</span>
-                          </label>
-                          <input
-                            className="fc-input"
-                            required
-                            value={q.prompt}
-                            onChange={(e) =>
-                              updateQuestion(idx, "prompt", e.target.value)
-                            }
-                            placeholder="Enter your question here…"
-                          />
-                        </div>
-                        <div className="fc-q-type-wrap">
-                          <label className="fc-label">Response Type</label>
-                          <select
-                            className="fc-input"
-                            value={q.type}
-                            onChange={(e) =>
-                              updateQuestion(idx, "type", e.target.value)
-                            }
-                          >
-                            <option value="text">✍️ Text Answer</option>
-                            <option value="rating">⭐ Star Rating</option>
-                            <option value="single-choice">
-                              🔘 Single Choice
-                            </option>
-                          </select>
-                        </div>
-                      </div>
-                      {(q.type === "single-choice" ||
-                        q.type === "multiple-choice") && (
-                        <div style={{ marginTop: 10 }}>
-                          <label className="fc-label">
-                            Options{" "}
-                            <span className="fc-hint">(comma-separated)</span>
-                          </label>
-                          <input
-                            className="fc-input"
-                            placeholder="Yes, No, Maybe, Not sure"
-                            value={q.optionsText}
-                            onChange={(e) =>
-                              updateQuestion(idx, "optionsText", e.target.value)
-                            }
-                          />
-                        </div>
-                      )}
-                      <div style={{ marginTop: 10 }}>
+                  <div className="fc-field-grid">
+                    <div className="fc-field">
+                      <label className="fc-label">Initial Status</label>
+                      <select
+                        className="fc-input"
+                        value={form.status}
+                        onChange={(e) => updateField("status", e.target.value)}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="live">Live</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="fc-field">
+                      <label className="fc-label">Visibility</label>
+                      <select
+                        className="fc-input"
+                        value={form.visibility}
+                        onChange={(e) =>
+                          updateField("visibility", e.target.value)
+                        }
+                      >
+                        <option value="public">🌐 Public Link</option>
+                        <option value="restricted">🔒 Restricted Users</option>
+                      </select>
+                    </div>
+                    <div className="fc-field">
+                      <label className="fc-label">Opens At</label>
+                      <input
+                        className="fc-input"
+                        type="datetime-local"
+                        value={form.opensAt}
+                        onChange={(e) => updateField("opensAt", e.target.value)}
+                      />
+                    </div>
+                    <div className="fc-field">
+                      <label className="fc-label">
+                        Closes At <span className="fc-hint">(optional)</span>
+                      </label>
+                      <input
+                        className="fc-input"
+                        type="datetime-local"
+                        value={form.closesAt}
+                        onChange={(e) =>
+                          updateField("closesAt", e.target.value)
+                        }
+                      />
+                    </div>
+                    {form.visibility === "restricted" && (
+                      <div className="fc-field fc-field--full">
                         <label className="fc-label">
-                          Suggested Answer Templates{" "}
-                          <span className="fc-hint">(comma-separated)</span>
+                          Allowed Respondents{" "}
+                          <span className="fc-hint">
+                            (comma-separated emails or IDs)
+                          </span>
                         </label>
                         <textarea
                           className="fc-input fc-textarea"
-                          style={{ height: 52 }}
-                          placeholder="Great session!, The speaker was excellent…"
-                          value={q.answerTemplatesText}
+                          style={{ height: 68 }}
+                          placeholder="user1@example.com, user2@example.com"
+                          value={form.allowedRespondentsText}
                           onChange={(e) =>
-                            updateQuestion(
-                              idx,
-                              "answerTemplatesText",
+                            updateField(
+                              "allowedRespondentsText",
                               e.target.value,
                             )
                           }
                         />
                       </div>
-                      <div className="fc-q-required">
-                        <input
-                          type="checkbox"
-                          id={`req-${idx}`}
-                          checked={q.required}
-                          onChange={(e) =>
-                            updateQuestion(idx, "required", e.target.checked)
-                          }
-                          style={{
-                            width: 14,
-                            height: 14,
-                            accentColor: "#3b82f6",
-                          }}
-                        />
-                        <label
-                          htmlFor={`req-${idx}`}
-                          className="fc-label"
-                          style={{ cursor: "pointer", margin: 0 }}
-                        >
-                          Mandatory
-                        </label>
+                    )}
+                  </div>
+
+                  {/* Personalization — only for restricted forms */}
+                  {form.visibility === "restricted" && (
+                    <>
+                      <div className="fc-divider" />
+                      <div className="fc-personalization-header">
+                        <p className="fc-sub-label" style={{ margin: 0 }}>
+                          Personalization
+                        </p>
+                        <span className="fc-badge-info">Restricted only</span>
                       </div>
+                      <p className="fc-personalization-hint">
+                        Pre-fill greeting names and company details per
+                        respondent. After publishing, you'll get unique links
+                        like <code>?name=John&amp;email=…</code> for each
+                        person.
+                      </p>
+                      <PersonalizationEditor
+                        respondents={allowedRespondents}
+                        personalizations={form.personalizations}
+                        onChange={(v) => updateField("personalizations", v)}
+                      />
+                    </>
+                  )}
+
+                  <div className="fc-divider" />
+                  <p className="fc-sub-label">
+                    Duplicate Submission Prevention
+                  </p>
+                  <div className="fc-chip-row">
+                    {[
+                      ["email", "📧 Email"],
+                      ["phone", "📱 Phone"],
+                      ["uniqueId", "🆔 Unique ID"],
+                    ].map(([f, lbl]) => {
+                      const on = form.duplicateCheckFields.includes(f);
+                      return (
+                        <button
+                          type="button"
+                          key={f}
+                          onClick={() => {
+                            const fields = on
+                              ? form.duplicateCheckFields.filter((x) => x !== f)
+                              : [...form.duplicateCheckFields, f];
+                            updateField("duplicateCheckFields", fields);
+                          }}
+                          className={`fc-chip ${on ? "fc-chip--on" : ""}`}
+                        >
+                          {lbl}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="fc-nav-row">
+                    <button
+                      type="button"
+                      className="fc-ghost-btn"
+                      onClick={() => setActiveSection("info")}
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="button"
+                      className="fc-next-btn"
+                      onClick={() => setActiveSection("questions")}
+                    >
+                      Next: Questions
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Section: Questions ── */}
+              {activeSection === "questions" && (
+                <div className="fc-section">
+                  <div className="fc-section-header">
+                    <div>
+                      <h2 className="fc-section-title">Form Questions</h2>
+                      <p className="fc-section-desc">
+                        {form.questions.length} question
+                        {form.questions.length !== 1 ? "s" : ""} added
+                      </p>
                     </div>
-                  ))}
-                  {form.questions.length === 0 && (
-                    <div className="fc-empty-q">
-                      <span style={{ fontSize: 36 }}>❓</span>
-                      <p>No questions yet. Add one or use a template above.</p>
+                    <button
+                      type="button"
+                      className="fc-add-q-btn"
+                      onClick={addQuestion}
+                    >
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Add Question
+                    </button>
+                  </div>
+
+                  {/* Quick templates */}
+                  <div className="fc-template-row">
+                    <span className="fc-template-label">Templates:</span>
+                    {QUESTION_TEMPLATES.map((t) => (
+                      <button
+                        key={t.label}
+                        type="button"
+                        className="fc-template-chip"
+                        onClick={() => addTemplate(t)}
+                      >
+                        + {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="fc-q-list">
+                    {form.questions.map((q, idx) => (
+                      <div key={idx} className="fc-q-card">
+                        <div className="fc-q-head">
+                          <div className="fc-q-meta">
+                            <span className="fc-q-num">{idx + 1}</span>
+                            <span style={{ fontSize: 15 }}>
+                              {QTYPE_ICONS[q.type] || "❓"}
+                            </span>
+                            <span className="fc-q-type-label">{q.type}</span>
+                          </div>
+                          <div className="fc-q-controls">
+                            <button
+                              type="button"
+                              className="fc-q-icon-btn"
+                              onClick={() => moveQuestion(idx, -1)}
+                              disabled={idx === 0}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              className="fc-q-icon-btn"
+                              onClick={() => moveQuestion(idx, 1)}
+                              disabled={idx === form.questions.length - 1}
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              className="fc-q-icon-btn fc-q-icon-btn--danger"
+                              onClick={() => removeQuestion(idx)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                        <div className="fc-q-body">
+                          <div className="fc-q-prompt-wrap">
+                            <label className="fc-label">
+                              Question Prompt <span className="fc-req">*</span>
+                            </label>
+                            <input
+                              className="fc-input"
+                              required
+                              value={q.prompt}
+                              onChange={(e) =>
+                                updateQuestion(idx, "prompt", e.target.value)
+                              }
+                              placeholder="Enter your question here…"
+                            />
+                          </div>
+                          <div className="fc-q-type-wrap">
+                            <label className="fc-label">Response Type</label>
+                            <select
+                              className="fc-input"
+                              value={q.type}
+                              onChange={(e) =>
+                                updateQuestion(idx, "type", e.target.value)
+                              }
+                            >
+                              <option value="text">✍️ Text Answer</option>
+                              <option value="rating">⭐ Star Rating</option>
+                              <option value="single-choice">
+                                🔘 Single Choice
+                              </option>
+                            </select>
+                          </div>
+                        </div>
+                        {(q.type === "single-choice" ||
+                          q.type === "multiple-choice") && (
+                          <div style={{ marginTop: 10 }}>
+                            <label className="fc-label">
+                              Options{" "}
+                              <span className="fc-hint">(comma-separated)</span>
+                            </label>
+                            <input
+                              className="fc-input"
+                              placeholder="Yes, No, Maybe, Not sure"
+                              value={q.optionsText}
+                              onChange={(e) =>
+                                updateQuestion(
+                                  idx,
+                                  "optionsText",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </div>
+                        )}
+                        <div style={{ marginTop: 10 }}>
+                          <label className="fc-label">
+                            Suggested Answer Templates{" "}
+                            <span className="fc-hint">(comma-separated)</span>
+                          </label>
+                          <textarea
+                            className="fc-input fc-textarea"
+                            style={{ height: 52 }}
+                            placeholder="Great session!, The speaker was excellent…"
+                            value={q.answerTemplatesText}
+                            onChange={(e) =>
+                              updateQuestion(
+                                idx,
+                                "answerTemplatesText",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="fc-q-required">
+                          <input
+                            type="checkbox"
+                            id={`req-${idx}`}
+                            checked={q.required}
+                            onChange={(e) =>
+                              updateQuestion(idx, "required", e.target.checked)
+                            }
+                            style={{
+                              width: 14,
+                              height: 14,
+                              accentColor: "#3b82f6",
+                            }}
+                          />
+                          <label
+                            htmlFor={`req-${idx}`}
+                            className="fc-label"
+                            style={{ cursor: "pointer", margin: 0 }}
+                          >
+                            Mandatory
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                    {form.questions.length === 0 && (
+                      <div className="fc-empty-q">
+                        <span style={{ fontSize: 36 }}>❓</span>
+                        <p>
+                          No questions yet. Add one or use a template above.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {status.type === "error" && (
+                    <div className="fc-status fc-status--error">
+                      <span>❌</span>
+                      <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>
+                        {status.message}
+                      </p>
                     </div>
                   )}
-                </div>
 
-                {status.type === "error" && (
-                  <div className="fc-status fc-status--error">
-                    <span>❌</span>
-                    <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>
-                      {status.message}
-                    </p>
+                  <div className="fc-nav-row">
+                    <button
+                      type="button"
+                      className="fc-ghost-btn"
+                      onClick={() => setActiveSection("settings")}
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="fc-submit-btn"
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <>
+                          <span className="fc-spinner" /> Publishing…
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>{" "}
+                          Save &amp; Publish
+                        </>
+                      )}
+                    </button>
                   </div>
-                )}
-
-                <div className="fc-nav-row">
-                  <button
-                    type="button"
-                    className="fc-ghost-btn"
-                    onClick={() => setActiveSection("settings")}
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    type="submit"
-                    className="fc-submit-btn"
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <>
-                        <span className="fc-spinner" /> Publishing…
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>{" "}
-                        Save &amp; Publish
-                      </>
-                    )}
-                  </button>
                 </div>
-              </div>
-            )}
-          </form>
+              )}
+            </form>
           )}
         </div>
       </main>
@@ -1278,16 +1296,16 @@ const CSS = `
     background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px 16px;
     margin-bottom:16px; font-size:13px; color:#92400e; font-weight:500;
 }
-.fc-draft-banner-left { display:flex; align-items:center; gap:8; flex:1; min-width:0; }
-.fc-draft-banner-actions { display:flex; gap:8; flex-shrink:0; }
+.fc-draft-banner-left { display:flex; align-items:center; gap:8px; flex:1; min-width:0; }
+.fc-draft-banner-actions { display:flex; gap:8px; flex-shrink:0; }
 .fc-draft-restore { padding:5px 14px; border-radius:7px; background:#f59e0b; color:#fff; border:none; font-size:12px; font-weight:700; cursor:pointer; }
 .fc-draft-discard { padding:5px 12px; border-radius:7px; background:transparent; color:#92400e; border:1px solid #fde68a; font-size:12px; font-weight:600; cursor:pointer; }
 
 /* Header */
-.fc-header { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12; }
+.fc-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
 .fc-back-link { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#3b82f6; text-decoration:none; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:5px; }
 .fc-page-title { font-size:22px; font-weight:800; color:#0f172a; letter-spacing:-0.02em; margin:0; }
-.fc-header-actions { display:flex; gap:10px; align-items:center; }
+.fc-header-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 .fc-save-draft-btn { display:inline-flex; align-items:center; gap:7px; background:#fffbeb; color:#92400e; padding:9px 16px; border-radius:9px; font-size:12px; font-weight:700; border:1.5px solid #fde68a; cursor:pointer; transition:background 0.15s; }
 .fc-save-draft-btn:hover:not(:disabled) { background:#fef3c7; }
 .fc-save-draft-btn:disabled { opacity:0.6; cursor:not-allowed; }
@@ -1296,34 +1314,34 @@ const CSS = `
 .fc-publish-btn:disabled { opacity:0.6; cursor:not-allowed; }
 
 /* Status messages */
-.fc-status { display:flex; align-items:flex-start; gap:10; padding:14px 16px; border-radius:10px; margin-bottom:16px; border:1px solid; font-size:13px; }
+.fc-status { display:flex; align-items:flex-start; gap:10px; padding:14px 16px; border-radius:10px; margin-bottom:16px; border:1px solid; font-size:13px; }
 .fc-status--draft   { background:#fffbeb; border-color:#fde68a; color:#92400e; }
 .fc-status--success { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
 .fc-status--error   { background:#fff5f5; border-color:#fecaca; color:#dc2626; }
-.fc-share-row { display:flex; gap:8; align-items:center; margin-top:8; flex-wrap:wrap; }
-.fc-share-code { font-size:11px; background:rgba(0,0,0,0.06); padding:5px 10px; border-radius:6px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.fc-copy-btn { font-size:11px; font-weight:700; background:rgba(0,0,0,0.07); border:none; border-radius:6px; padding:5px 12px; cursor:pointer; color:inherit; white-space:nowrap; }
-.fc-open-btn { font-size:11px; font-weight:700; text-decoration:none; color:inherit; background:rgba(0,0,0,0.07); border-radius:6px; padding:5px 12px; }
+.fc-share-row { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+.fc-share-code { font-size:11px; background:rgba(0,0,0,0.06); padding:5px 10px; border-radius:6px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fc-copy-btn { font-size:11px; font-weight:700; background:rgba(0,0,0,0.07); border:none; border-radius:6px; padding:5px 12px; cursor:pointer; color:inherit; white-space:nowrap; flex-shrink:0; }
+.fc-open-btn { font-size:11px; font-weight:700; text-decoration:none; color:inherit; background:rgba(0,0,0,0.07); border-radius:6px; padding:5px 12px; white-space:nowrap; flex-shrink:0; }
 
 /* Personalized links panel */
 .fc-personalized-links { margin-top:14px; padding-top:14px; border-top:1px solid rgba(0,0,0,0.08); }
 .fc-personalized-links-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
-.fc-pl-list { display:flex; flex-direction:column; gap:6; margin-top:4px; }
-.fc-pl-row { display:grid; grid-template-columns:160px 1fr auto; gap:8; align-items:center; background:rgba(0,0,0,0.04); border-radius:8px; padding:8px 10px; }
-.fc-pl-info { display:flex; flex-direction:column; gap:1; overflow:hidden; }
+.fc-pl-list { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+.fc-pl-row { display:grid; grid-template-columns:160px 1fr auto; gap:8px; align-items:center; background:rgba(0,0,0,0.04); border-radius:8px; padding:8px 10px; }
+.fc-pl-info { display:flex; flex-direction:column; gap:1px; overflow:hidden; min-width:0; }
 .fc-pl-name { font-size:12px; font-weight:700; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fc-pl-email { font-size:10px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.fc-pl-url { font-size:10px; color:#2563eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:rgba(59,130,246,0.08); padding:4px 8px; border-radius:5px; }
+.fc-pl-url { font-size:10px; color:#2563eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:rgba(59,130,246,0.08); padding:4px 8px; border-radius:5px; min-width:0; }
 
 /* Step nav */
-.fc-step-nav { display:flex; gap:4; background:#fff; border:1px solid #e8ecf0; border-radius:11px; padding:5px; margin-bottom:18px; overflow-x:auto; }
+.fc-step-nav { display:flex; gap:4px; background:#fff; border:1px solid #e8ecf0; border-radius:11px; padding:5px; margin-bottom:18px; overflow-x:auto; }
 .fc-step-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px 14px; border-radius:8px; font-size:11.5px; font-weight:700; color:#64748b; background:transparent; border:none; cursor:pointer; transition:all 0.15s; white-space:nowrap; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-step-btn--active { background:#0f172a; color:#fff; }
 .fc-step-icon { font-size:13px; }
 
 /* Section */
 .fc-section { background:#fff; border-radius:14px; border:1px solid #e8ecf0; padding:26px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
-.fc-section-header { margin-bottom:20px; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:10; }
+.fc-section-header { margin-bottom:20px; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:10px; }
 .fc-section-title { font-size:17px; font-weight:800; color:#0f172a; margin:0 0 3px; letter-spacing:-0.01em; }
 .fc-section-desc  { font-size:12.5px; color:#94a3b8; margin:0; }
 
@@ -1367,7 +1385,7 @@ const CSS = `
 /* Questions */
 .fc-q-list { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
 .fc-add-q-btn { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#2563eb; padding:8px 14px; border-radius:8px; font-size:11.5px; font-weight:700; border:1.5px solid #bfdbfe; cursor:pointer; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; }
-.fc-template-row { display:flex; flex-wrap:wrap; gap:6; align-items:center; margin-bottom:14px; padding:11px 13px; background:#f8fafc; border-radius:9px; border:1px solid #e8ecf0; }
+.fc-template-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:14px; padding:11px 13px; background:#f8fafc; border-radius:9px; border:1px solid #e8ecf0; }
 .fc-template-label { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; }
 .fc-template-chip { font-size:11px; font-weight:600; color:#475569; background:#fff; border:1.5px solid #e8ecf0; border-radius:99px; padding:5px 11px; cursor:pointer; transition:all 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-template-chip:hover { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; }
@@ -1377,7 +1395,7 @@ const CSS = `
 .fc-q-meta { display:flex; align-items:center; gap:8px; }
 .fc-q-num  { width:24px; height:24px; border-radius:7px; background:#0f172a; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .fc-q-type-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; }
-.fc-q-controls { display:flex; gap:4; }
+.fc-q-controls { display:flex; gap:4px; }
 .fc-q-icon-btn { width:27px; height:27px; border-radius:6px; background:#f1f5f9; border:1px solid #e8ecf0; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; color:#64748b; font-weight:700; transition:all 0.13s; }
 .fc-q-icon-btn:hover:not(:disabled) { background:#e2e8f0; }
 .fc-q-icon-btn:disabled { opacity:0.3; cursor:not-allowed; }
@@ -1395,9 +1413,9 @@ const CSS = `
 .fc-badge-info { font-size:10px; font-weight:700; color:#2563eb; background:#eff6ff; border:1px solid #bfdbfe; padding:3px 9px; border-radius:99px; }
 .fc-personalization-hint { font-size:12px; color:#94a3b8; margin:0 0 12px; line-height:1.5; }
 .fc-personalization-hint code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:11px; }
-.fc-personalization-list { display:flex; flex-direction:column; gap:8; }
-.fc-person-row { display:grid; grid-template-columns:1fr 140px 160px; gap:8; align-items:center; background:#fff; border:1px solid #e8ecf0; border-radius:9px; padding:10px 12px; }
-.fc-person-id { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fc-personalization-list { display:flex; flex-direction:column; gap:8px; }
+.fc-person-row { display:grid; grid-template-columns:1fr 140px 160px; gap:8px; align-items:center; background:#fff; border:1px solid #e8ecf0; border-radius:9px; padding:10px 12px; }
+.fc-person-id { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .fc-person-name, .fc-person-company { font-size:12px; }
 
 /* Responsive */
@@ -1408,6 +1426,11 @@ const CSS = `
     .fc-person-row { grid-template-columns:1fr; }
     .fc-step-btn { font-size:10px; padding:8px 10px; }
     .fc-pl-row { grid-template-columns:1fr; }
+    .fc-header { flex-direction:column; align-items:flex-start; }
+    .fc-header-actions { width:100%; justify-content:flex-end; }
+    .fc-pl-url { max-width:100%; }
+    .fc-share-row { flex-direction:column; align-items:flex-start; }
+    .fc-share-code { width:100%; }
 }
 `;
 

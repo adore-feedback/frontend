@@ -1,434 +1,1373 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { getPublicForm, submitPublicFormResponse } from '../api/feedbackApi';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { getPublicForm, submitPublicFormResponse } from "../api/feedbackApi";
 
 const getSentiment = (rating) => {
-    const v = Number(rating);
-    return v >= 4 ? 'positive' : v <= 2 ? 'negative' : 'neutral';
+  const v = Number(rating);
+  return v >= 4 ? "positive" : v <= 2 ? "negative" : "neutral";
 };
 
+/* ─── Star Rating ─────────────────────────────────────────────────────────── */
 const StarRating = ({ value, onChange }) => {
-    const [hovered, setHovered] = useState(0);
-    const current = hovered || Number(value) || 0;
-    const LABELS  = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'];
-    return (
-        <div>
-            <div style={{display:'flex',alignItems:'center',gap:6,padding:'8px 0'}}>
-                {[1,2,3,4,5].map(star => (
-                    <button
-                        key={star} type="button"
-                        onMouseEnter={() => setHovered(star)}
-                        onMouseLeave={() => setHovered(0)}
-                        onClick={() => onChange(String(star))}
-                        style={{background:'none',border:'none',cursor:'pointer',padding:4,transition:'transform 0.15s',transform: star<=current?'scale(1.15)':'scale(1)'}}
-                    >
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill={star<=current?'#f59e0b':'none'} stroke={star<=current?'#f59e0b':'#d1d5db'} strokeWidth="1.5">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                        </svg>
-                    </button>
-                ))}
-                {current > 0 && (
-                    <span style={{fontSize:13,fontWeight:700,color:'#f59e0b',marginLeft:8}}>
-                        {LABELS[current]}
-                    </span>
-                )}
-            </div>
-        </div>
-    );
+  const [hovered, setHovered] = useState(0);
+  const current = hovered || Number(value) || 0;
+  const LABELS = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
+  return (
+    <div style={{ padding: "4px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onMouseEnter={() => setHovered(star)}
+            onMouseLeave={() => setHovered(0)}
+            onClick={() => onChange(String(star))}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 2,
+              transition: "transform 0.15s",
+              transform: star <= current ? "scale(1.18)" : "scale(1)",
+            }}
+          >
+            <svg
+              width="34"
+              height="34"
+              viewBox="0 0 24 24"
+              fill={star <= current ? "#f59e0b" : "none"}
+              stroke={star <= current ? "#f59e0b" : "#cbd5e1"}
+              strokeWidth="1.5"
+            >
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
+        ))}
+        {current > 0 && (
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#f59e0b",
+              marginLeft: 4,
+            }}
+          >
+            {LABELS[current]}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 };
 
+/* ─── Email Gate (for restricted forms accessed via common link) ───────────── */
+const EmailGate = ({ onSubmit, error }) => {
+  const [email, setEmail] = useState("");
+  return (
+    <div style={S.gateWrap}>
+      <style>{CSS}</style>
+      <div style={S.gateCard}>
+        <div style={S.gateIcon}>
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+        </div>
+        <h2 style={S.gateTitle}>Access Verification</h2>
+        <p style={S.gateDesc}>
+          This form is restricted. Enter your email to confirm you're on the
+          approved respondent list.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <label style={S.inputLabel}>
+            Email Address <span style={{ color: "#ef4444" }}>*</span>
+          </label>
+          <input
+            type="email"
+            required
+            autoFocus
+            style={{ ...S.input, fontSize: 14 }}
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && email && onSubmit(email)}
+          />
+        </div>
+        {error && (
+          <div style={S.alertError}>
+            <span>⛔</span>
+            <span>{error}</span>
+          </div>
+        )}
+        <button
+          type="button"
+          style={S.submitBtn}
+          onClick={() => onSubmit(email)}
+          disabled={!email}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+          Verify Access
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/* ─── Duplicate Response Screen ───────────────────────────────────────────── */
+const AlreadyResponded = ({ formTitle, respondentName }) => (
+  <div style={S.successWrap}>
+    <style>{CSS}</style>
+    <div style={S.successCard}>
+      <div
+        style={{
+          ...S.successIcon,
+          background: "linear-gradient(135deg,#f59e0b,#d97706)",
+        }}
+      >
+        <svg
+          width="32"
+          height="32"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      </div>
+      <h1 style={S.successTitle}>Already Submitted</h1>
+      <p style={S.successDesc}>
+        {respondentName
+          ? `Hi ${respondentName.split(" ")[0]}, you've`
+          : "You've"}{" "}
+        already submitted a response for{" "}
+        <strong style={{ color: "#3b82f6" }}>{formTitle}</strong>.
+      </p>
+      <p
+        style={{
+          fontSize: 13,
+          color: "#64748b",
+          lineHeight: 1.6,
+          margin: "0 0 20px",
+        }}
+      >
+        Only one response per person is allowed. If you think this is an error,
+        please contact the form administrator.
+      </p>
+      <div style={S.successDivider} />
+      <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
+        Powered by Simtrak Feedback Hub
+      </p>
+    </div>
+  </div>
+);
+
+/* ─── Main Component ──────────────────────────────────────────────────────── */
 const PublicFeedbackForm = () => {
-    const { formId }         = useParams();
-    const [searchParams]     = useSearchParams();
+  const { formId } = useParams();
+  const [searchParams] = useSearchParams();
 
-    // Read personalization params from URL (?name=John&email=...&company=...)
-    const urlName    = searchParams.get('name')    || '';
-    const urlEmail   = searchParams.get('email')   || '';
-    const urlPhone   = searchParams.get('phone')   || '';
-    const urlCompany = searchParams.get('company') || '';
-    const urlUniqueId= searchParams.get('uniqueId')|| '';
+  /*
+   * URL params are ONLY used for personalization on restricted forms —
+   * they are NOT used to auto-fill name/email for public forms.
+   * The greeting in the hero uses prefillGreeting (server-sourced or
+   * URL-name for restricted forms) but NEVER overwrites the form's
+   * name input if the user edits it.
+   */
+  const urlName = searchParams.get("name") || "";
+  const urlEmail = searchParams.get("email") || "";
+  const urlPhone = searchParams.get("phone") || "";
+  const urlCompany = searchParams.get("company") || "";
+  const urlUniqueId = searchParams.get("uniqueId") || "";
 
-    const [form, setForm]             = useState(null);
-    const [prefillGreeting, setPrefillGreeting] = useState(''); // server-side greeting name
-    const [respondent, setRespondent] = useState({
-        name: urlName, email: urlEmail, phone: urlPhone,
-        uniqueId: urlUniqueId, companyName: urlCompany, companyDetails: '',
-    });
-    const [answers, setAnswers]       = useState({});
-    const [status, setStatus]         = useState({ type:'', message:'' });
-    const [isLoading, setIsLoading]   = useState(true);
-    const [submitted, setSubmitted]   = useState(false);
-    const [activeQ, setActiveQ]       = useState(null);
+  // Detect a "personalized link": at minimum email must be in URL
+  const isPersonalizedLink = Boolean(urlEmail);
 
-    const loadForm = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            // Pass URL-based access credentials for restricted forms
-            const access = {};
-            if (urlEmail)    access.email    = urlEmail;
-            if (urlPhone)    access.phone    = urlPhone;
-            if (urlUniqueId) access.uniqueId = urlUniqueId;
+  const [form, setForm] = useState(null);
+  const [prefillGreeting, setPrefillGreeting] = useState(""); // display only — never written to input
+  const [respondent, setRespondent] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    uniqueId: "",
+    companyName: "",
+    companyDetails: "",
+  });
+  const [answers, setAnswers] = useState({});
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [isLoading, setIsLoading] = useState(true);
+  const [submitted, setSubmitted] = useState(false);
+  const [alreadyResponded, setAlreadyResponded] = useState(false);
+  const [activeQ, setActiveQ] = useState(null);
 
-            const data = await getPublicForm(formId, access);
-            setForm(data.form);
+  // Email gate: only shown for restricted forms accessed WITHOUT a personalized link
+  const [needsEmailGate, setNeedsEmailGate] = useState(false);
+  const [gateEmail, setGateEmail] = useState("");
+  const [gateError, setGateError] = useState("");
+  const [gateVerifying, setGateVerifying] = useState(false);
 
-            // Merge server-side prefill with URL params
-            // URL params take priority (they were set by the admin intentionally)
-            const serverPrefill = data.prefill || {};
-            setPrefillGreeting(serverPrefill.name || urlName || '');
-
-            setRespondent(prev => ({
-                name:         urlName    || serverPrefill.name        || prev.name        || '',
-                email:        urlEmail   || serverPrefill.email       || prev.email       || '',
-                phone:        urlPhone   || serverPrefill.phone       || prev.phone       || '',
-                uniqueId:     urlUniqueId|| serverPrefill.uniqueId    || prev.uniqueId    || '',
-                companyName:  urlCompany || serverPrefill.companyName || prev.companyName || '',
-                companyDetails: prev.companyDetails || '',
-            }));
-        } catch (err) {
-            setStatus({ type:'error', message: err.message });
-        } finally {
-            setIsLoading(false);
+  /* ── Load form ── */
+  const loadForm = useCallback(
+    async (overrideEmail = null) => {
+      setIsLoading(true);
+      setStatus({ type: "", message: "" });
+      try {
+        /*
+         * Access credentials:
+         * - For personalized links: pass URL params (email, phone, uniqueId)
+         * - For restricted forms via common link: pass gated email once verified
+         * - For public forms: pass nothing
+         */
+        const access = {};
+        if (isPersonalizedLink) {
+          if (urlEmail) access.email = urlEmail;
+          if (urlPhone) access.phone = urlPhone;
+          if (urlUniqueId) access.uniqueId = urlUniqueId;
+        } else if (overrideEmail || gateEmail) {
+          access.email = overrideEmail || gateEmail;
         }
-    }, [formId, urlEmail, urlPhone, urlUniqueId, urlName, urlCompany]);
 
-    useEffect(() => { loadForm(); }, [loadForm]);
+        const data = await getPublicForm(formId, access);
+        setForm(data.form);
 
-    const ratingQ     = useMemo(() => form?.questions?.find(q => q.type === 'rating'), [form]);
-    const ratingValue = answers[ratingQ?.id] || null;
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setStatus({ type:'', message:'' });
-        const payload = {
-            respondent,
-            rating: ratingValue ? Number(ratingValue) : undefined,
-            ...(ratingValue != null && ratingValue !== '' ? { sentiment: getSentiment(ratingValue) } : {}),
-            answers: form.questions.map(q => ({
-                questionId: q.id,
-                prompt: q.prompt,
-                type: q.type,
-                value: answers[q.id] ?? '',
-            })),
-        };
-        try {
-            await submitPublicFormResponse(form._id || form.id || form.slug, payload);
-            setSubmitted(true);
-        } catch (err) {
-            setStatus({ type:'error', message: err.message });
+        // Check duplicate flag returned by server
+        if (data.alreadyResponded) {
+          setAlreadyResponded(true);
+          setIsLoading(false);
+          return;
         }
+
+        const serverPrefill = data.prefill || {};
+
+        /*
+         * Greeting (hero display only) — personalized links get name from URL/server.
+         * Public form respondents see no greeting until they type their name.
+         */
+        if (isPersonalizedLink) {
+          setPrefillGreeting(urlName || serverPrefill.name || "");
+        }
+
+        /*
+         * Pre-fill respondent fields ONLY for personalized links.
+         * For public / restricted-via-gate forms: leave fields blank so
+         * the respondent fills them in. The gate-verified email is
+         * pre-populated into email for convenience.
+         */
+        if (isPersonalizedLink) {
+          setRespondent({
+            name: urlName || serverPrefill.name || "",
+            email: urlEmail || serverPrefill.email || "",
+            phone: urlPhone || serverPrefill.phone || "",
+            uniqueId: urlUniqueId || serverPrefill.uniqueId || "",
+            companyName: urlCompany || serverPrefill.companyName || "",
+            companyDetails: "",
+          });
+        } else if (overrideEmail || gateEmail) {
+          // Gate-verified email pre-fills the email field only
+          setRespondent((prev) => ({
+            ...prev,
+            email: overrideEmail || gateEmail,
+          }));
+        }
+      } catch (err) {
+        // Server signals restricted + no credentials → show email gate
+        if (
+          err.status === 403 &&
+          err.code === "RESTRICTED_FORM" &&
+          !isPersonalizedLink
+        ) {
+          setNeedsEmailGate(true);
+        } else {
+          setStatus({ type: "error", message: err.message });
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [
+      formId,
+      isPersonalizedLink,
+      urlEmail,
+      urlPhone,
+      urlUniqueId,
+      urlName,
+      urlCompany,
+      gateEmail,
+    ],
+  );
+
+  useEffect(() => {
+    loadForm();
+  }, [loadForm]);
+
+  /* ── Email gate submission ── */
+  const handleGateSubmit = async (email) => {
+    setGateVerifying(true);
+    setGateError("");
+    try {
+      const access = { email };
+      const data = await getPublicForm(formId, access);
+      setGateEmail(email);
+      setNeedsEmailGate(false);
+      setForm(data.form);
+      if (data.alreadyResponded) {
+        setAlreadyResponded(true);
+        return;
+      }
+      // Pre-fill email field only
+      setRespondent((prev) => ({ ...prev, email }));
+    } catch (err) {
+      if (err.status === 403) {
+        setGateError(
+          "Your email is not on the approved respondent list for this form.",
+        );
+      } else {
+        setGateError(err.message || "Verification failed. Please try again.");
+      }
+    } finally {
+      setGateVerifying(false);
+    }
+  };
+
+  const ratingQ = useMemo(
+    () => form?.questions?.find((q) => q.type === "rating"),
+    [form],
+  );
+  const ratingValue = answers[ratingQ?.id] || null;
+
+  /* ── Form submit ── */
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setStatus({ type: "", message: "" });
+    const payload = {
+      respondent,
+      rating: ratingValue ? Number(ratingValue) : undefined,
+      sentiment: ratingValue ? getSentiment(ratingValue) : undefined,
+      answers: form.questions.map((q) => ({
+        questionId: q.id,
+        prompt: q.prompt,
+        type: q.type,
+        value: answers[q.id] ?? "",
+      })),
     };
+    try {
+      await submitPublicFormResponse(form._id || form.id || form.slug, payload);
+      setSubmitted(true);
+    } catch (err) {
+      // Duplicate detected at submit time (race condition or no pre-check)
+      if (err.status === 409 || err.code === "DUPLICATE_RESPONSE") {
+        setAlreadyResponded(true);
+      } else {
+        setStatus({ type: "error", message: err.message });
+      }
+    }
+  };
 
-    /* ── Loading ── */
-    if (isLoading) return (
-        <div style={S.loadWrap}>
-            <style>{CSS}</style>
-            <div style={S.loadRing}/>
-            <p style={S.loadText}>Loading Form…</p>
-        </div>
-    );
-
-    /* ── Error / not found ── */
-    if (!form && status.type === 'error') return (
-        <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',fontFamily:"'DM Sans',system-ui"}}>
-            <style>{CSS}</style>
-            <div style={{textAlign:'center',padding:40,maxWidth:400}}>
-                <span style={{fontSize:48}}>🔒</span>
-                <p style={{fontSize:16,fontWeight:700,color:'#ef4444',marginTop:12}}>{status.message}</p>
-                <p style={{fontSize:13,color:'#94a3b8',marginTop:8}}>
-                    {status.message?.includes('not authorized') || status.message?.includes('credentials')
-                        ? 'This form requires a personalized link. Please use the link that was sent to you.'
-                        : 'If you believe this is an error, please contact the form administrator.'}
-                </p>
-            </div>
-        </div>
-    );
-
-    /* ── Submitted ── */
-    if (submitted) return (
-        <div style={S.successWrap}>
-            <style>{CSS}</style>
-            <div style={S.successCard}>
-                <div style={S.successIcon}>
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-                        <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                </div>
-                <h1 style={S.successTitle}>
-                    {respondent.name ? `Thank you, ${respondent.name.split(' ')[0]}!` : 'Thank you!'}
-                </h1>
-                <p style={S.successDesc}>
-                    Your feedback for <strong style={{color:'#3b82f6'}}>{form?.title}</strong> has been securely recorded.
-                </p>
-                <p style={{fontSize:13,color:'#64748b',lineHeight:1.6,margin:'0 0 20px'}}>
-                    {respondent.email
-                        ? `A confirmation has been sent to ${respondent.email}.`
-                        : 'You may close this window.'}
-                </p>
-                <div style={S.successDivider}/>
-                <p style={{fontSize:12,color:'#94a3b8',margin:0}}>Powered by Simtrak Feedback Hub</p>
-            </div>
-        </div>
-    );
-
-    if (!form) return null;
-
-    const FORM_TYPE_ICONS = { webinar:'🎙️', flash:'⚡', survey:'📊', default:'📋' };
-    const typeIcon = FORM_TYPE_ICONS[form.formType] || FORM_TYPE_ICONS.default;
-
-    // Personalized greeting shown in hero if we have a name
-    const greeting = prefillGreeting || respondent.name;
-
+  /* ── Render states ── */
+  if (isLoading)
     return (
-        <main style={S.main}>
-            <style>{CSS}</style>
-
-            {/* Hero Header */}
-            <div style={S.hero}>
-                <div style={S.heroInner}>
-                    <div style={S.formTypePill}>
-                        <span>{typeIcon}</span>
-                        <span>{form.formType || 'Feedback Form'}</span>
-                    </div>
-                    {greeting && (
-                        <p style={S.heroGreeting}>👋 Hey {greeting}, we'd love your feedback!</p>
-                    )}
-                    <h1 style={S.heroTitle}>{form.title}</h1>
-                    {form.description && <p style={S.heroDesc}>{form.description}</p>}
-                </div>
-                <div style={S.heroDots}/>
-            </div>
-
-            {/* Progress hint */}
-            <div style={{background:'#fff',borderBottom:'1px solid #e8ecf0'}}>
-                <div style={{maxWidth:680,margin:'0 auto',padding:'10px 20px',display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{height:3,flex:1,background:'#e8ecf0',borderRadius:999,overflow:'hidden'}}>
-                        <div style={{height:'100%',width:'20%',background:'linear-gradient(90deg,#3b82f6,#6366f1)',borderRadius:999}}/>
-                    </div>
-                    <span style={{fontSize:11,fontWeight:600,color:'#94a3b8',whiteSpace:'nowrap'}}>Secure · Confidential</span>
-                </div>
-            </div>
-
-            <div style={S.formWrap}>
-                <form style={{display:'flex',flexDirection:'column',gap:16}} onSubmit={handleSubmit}>
-
-                    {/* Participant Card */}
-                    <div style={S.card}>
-                        <div style={S.cardHeader}>
-                            <span style={S.cardIcon}>👤</span>
-                            <h2 style={S.cardTitle}>Participant Details</h2>
-                        </div>
-                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-                            <div style={S.inputWrap}>
-                                <label style={S.inputLabel}>Full Name <span style={{color:'#ef4444'}}>*</span></label>
-                                <input
-                                    style={S.input} required
-                                    placeholder="Your full name"
-                                    value={respondent.name}
-                                    onChange={e => setRespondent({...respondent, name: e.target.value})}
-                                />
-                            </div>
-                            <div style={S.inputWrap}>
-                                <label style={S.inputLabel}>Email Address</label>
-                                <input
-                                    style={S.input} type="email"
-                                    placeholder="you@example.com"
-                                    value={respondent.email}
-                                    onChange={e => setRespondent({...respondent, email: e.target.value})}
-                                />
-                            </div>
-                            {form.collectsPhone && (
-                                <div style={S.inputWrap}>
-                                    <label style={S.inputLabel}>Phone {form.phoneRequired && <span style={{color:'#ef4444'}}>*</span>}</label>
-                                    <input
-                                        style={S.input} type="tel"
-                                        placeholder="+91 98765 43210"
-                                        required={form.phoneRequired}
-                                        value={respondent.phone}
-                                        onChange={e => setRespondent({...respondent, phone: e.target.value})}
-                                    />
-                                </div>
-                            )}
-                            {form.collectsCompanyDetails && (
-                                <div style={S.inputWrap}>
-                                    <label style={S.inputLabel}>Company {form.companyDetailsRequired && <span style={{color:'#ef4444'}}>*</span>}</label>
-                                    <input
-                                        style={S.input}
-                                        placeholder="Your organization"
-                                        required={form.companyDetailsRequired}
-                                        value={respondent.companyName}
-                                        onChange={e => setRespondent({...respondent, companyName: e.target.value})}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Questions */}
-                    {(form.questions || []).map((q, idx) => (
-                        <div
-                            key={q.id || idx}
-                            style={{...S.card, ...(activeQ === (q.id || idx) ? S.cardFocused : {})}}
-                            onClick={() => setActiveQ(q.id || idx)}
-                        >
-                            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
-                                <div style={S.qNum}>{idx + 1}</div>
-                                <label style={S.qPrompt}>
-                                    {q.prompt}
-                                    {q.required && <span style={{color:'#ef4444',marginLeft:4}}>*</span>}
-                                </label>
-                            </div>
-
-                            {q.type === 'rating' && (
-                                <StarRating
-                                    value={answers[q.id] || ''}
-                                    onChange={val => setAnswers({...answers, [q.id]: val})}
-                                />
-                            )}
-
-                            {q.type === 'text' && (
-                                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                                    <textarea
-                                        style={S.textarea}
-                                        required={q.required}
-                                        value={answers[q.id] || ''}
-                                        onChange={e => setAnswers({...answers, [q.id]: e.target.value})}
-                                        placeholder="Share your thoughts…"
-                                    />
-                                    {q.answerTemplates?.length > 0 && (
-                                        <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                                            <span style={{fontSize:10,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',alignSelf:'center',marginRight:4}}>Templates:</span>
-                                            {q.answerTemplates.slice(0,3).map(t => (
-                                                <button
-                                                    key={t} type="button"
-                                                    onClick={() => setAnswers({...answers, [q.id]: t})}
-                                                    style={S.templateBtn}
-                                                >
-                                                    {t}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {q.type === 'single-choice' && (
-                                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                                    {(q.options || []).map(opt => (
-                                        <label key={opt} style={{
-                                            ...S.choiceLabel,
-                                            ...(answers[q.id] === opt ? S.choiceLabelSelected : {}),
-                                        }}>
-                                            <div style={{
-                                                ...S.choiceCircle,
-                                                ...(answers[q.id] === opt ? S.choiceCircleSelected : {}),
-                                            }}>
-                                                {answers[q.id] === opt && <div style={{width:8,height:8,borderRadius:'50%',background:'#fff'}}/>}
-                                            </div>
-                                            <input type="radio" style={{display:'none'}} checked={answers[q.id] === opt} onChange={() => setAnswers({...answers, [q.id]: opt})}/>
-                                            <span style={{fontSize:13,fontWeight:answers[q.id] === opt ? 700 : 500}}>{opt}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-
-                            {q.type === 'multiple-choice' && (
-                                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                                    {(q.options || []).map(opt => {
-                                        const selected = (answers[q.id] || []).includes(opt);
-                                        return (
-                                            <label key={opt} style={{
-                                                ...S.choiceLabel,
-                                                ...(selected ? S.choiceLabelSelected : {}),
-                                            }}>
-                                                <div style={{
-                                                    width:20, height:20, borderRadius:6, flexShrink:0, display:'flex',
-                                                    alignItems:'center', justifyContent:'center', transition:'all 0.15s',
-                                                    border: selected ? '2px solid #3b82f6' : '2px solid #e8ecf0',
-                                                    background: selected ? '#3b82f6' : 'transparent',
-                                                }}>
-                                                    {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-                                                </div>
-                                                <input type="checkbox" style={{display:'none'}} checked={selected} onChange={() => {
-                                                    const prev = answers[q.id] || [];
-                                                    setAnswers({...answers, [q.id]: selected ? prev.filter(x => x !== opt) : [...prev, opt]});
-                                                }}/>
-                                                <span style={{fontSize:13,fontWeight:selected ? 700 : 500}}>{opt}</span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-
-                    {/* Error */}
-                    {status.type === 'error' && (
-                        <div style={{background:'#fff5f5',border:'1px solid #fecaca',borderRadius:12,padding:'14px 16px',display:'flex',gap:10,alignItems:'center'}}>
-                            <span style={{fontSize:18}}>⚠️</span>
-                            <p style={{fontSize:13,color:'#dc2626',fontWeight:600,margin:0}}>{status.message}</p>
-                        </div>
-                    )}
-
-                    {/* Submit */}
-                    <button type="submit" style={S.submitBtn}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                        Submit Feedback
-                    </button>
-
-                    <p style={{textAlign:'center',fontSize:10,color:'#94a3b8',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',margin:0}}>
-                        🔒 Verified · Secure · Powered by Simtrak Feedback Hub
-                    </p>
-                </form>
-            </div>
-        </main>
+      <div style={S.loadWrap}>
+        <style>{CSS}</style>
+        <div style={S.loadRing} />
+        <p style={S.loadText}>Loading…</p>
+      </div>
     );
+
+  if (needsEmailGate)
+    return (
+      <EmailGate
+        onSubmit={handleGateSubmit}
+        error={gateError}
+        loading={gateVerifying}
+      />
+    );
+
+  if (!form && status.type === "error")
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100vh",
+          background: "#f8fafc",
+          fontFamily: "'Outfit', system-ui",
+        }}
+      >
+        <style>{CSS}</style>
+        <div style={{ textAlign: "center", padding: 40, maxWidth: 420 }}>
+          <div style={{ fontSize: 52, marginBottom: 16 }}>🔒</div>
+          <h2
+            style={{
+              fontSize: 20,
+              fontWeight: 800,
+              color: "#0f172a",
+              marginBottom: 8,
+            }}
+          >
+            Access Denied
+          </h2>
+          <p style={{ fontSize: 15, color: "#64748b", lineHeight: 1.6 }}>
+            {status.message}
+          </p>
+          {(status.message?.includes("not authorized") ||
+            status.message?.includes("credentials")) && (
+            <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 12 }}>
+              This form requires a personalized link. Please use the link that
+              was sent to you directly.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+
+  if (alreadyResponded)
+    return (
+      <AlreadyResponded
+        formTitle={form?.title}
+        respondentName={respondent.name}
+      />
+    );
+
+  if (submitted)
+    return (
+      <div style={S.successWrap}>
+        <style>{CSS}</style>
+        <div style={S.successCard}>
+          <div style={S.successIcon}>
+            <svg
+              width="34"
+              height="34"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+          <h1 style={S.successTitle}>
+            {respondent.name
+              ? `Thank you, ${respondent.name.split(" ")[0]}!`
+              : "Thank you!"}
+          </h1>
+          <p style={S.successDesc}>
+            Your feedback for{" "}
+            <strong style={{ color: "#3b82f6" }}>{form?.title}</strong> has been
+            securely recorded.
+          </p>
+          <p
+            style={{
+              fontSize: 13,
+              color: "#64748b",
+              lineHeight: 1.6,
+              margin: "0 0 20px",
+            }}
+          >
+            {respondent.email
+              ? `A confirmation has been sent to ${respondent.email}.`
+              : "You may close this window."}
+          </p>
+          <div style={S.successDivider} />
+          <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
+            Powered by Simtrak Feedback Hub
+          </p>
+        </div>
+      </div>
+    );
+
+  if (!form) return null;
+
+  const FORM_TYPE_ICONS = {
+    webinar: "🎙️",
+    flash: "⚡",
+    survey: "📊",
+    default: "📋",
+  };
+  const typeIcon = FORM_TYPE_ICONS[form.formType] || FORM_TYPE_ICONS.default;
+
+  // Greeting shown ONLY when a personalized link is used — purely cosmetic, never touches inputs
+  const greeting = isPersonalizedLink ? prefillGreeting || "" : "";
+
+  return (
+    <main style={S.main}>
+      <style>{CSS}</style>
+
+      {/* ── Hero ── */}
+      <header style={S.hero}>
+        <div style={S.heroNoise} />
+        <div style={S.heroOrb} />
+        <div style={S.heroInner}>
+          <div style={S.pill}>
+            <span>{typeIcon}</span>
+            <span>
+              {form.formTypeLabel || form.formType || "Feedback Form"}
+            </span>
+          </div>
+          {greeting && (
+            <p style={S.heroGreeting}>
+              👋 Hey {greeting}, we'd love your feedback!
+            </p>
+          )}
+          <h1 style={S.heroTitle}>{form.title}</h1>
+          {form.description && <p style={S.heroDesc}>{form.description}</p>}
+
+          {/* Availability hints */}
+          {form.availability?.closesAt && (
+            <div style={S.closingBadge}>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>
+                Closes{" "}
+                {new Date(form.availability.closesAt).toLocaleDateString(
+                  "en-IN",
+                  { day: "numeric", month: "short", year: "numeric" },
+                )}
+              </span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* ── Progress bar ── */}
+      <div style={S.progressBar}>
+        <div style={S.progressInner}>
+          <div style={S.progressTrack}>
+            <div style={{ ...S.progressFill, width: "15%" }} />
+          </div>
+          <span style={S.progressLabel}>🔒 Secure · Confidential</span>
+        </div>
+      </div>
+
+      {/* ── Form body ── */}
+      <div style={S.formWrap}>
+        <form
+          style={{ display: "flex", flexDirection: "column", gap: 20 }}
+          onSubmit={handleSubmit}
+        >
+          {/* Participant Details card */}
+          <section style={S.card}>
+            <div style={S.cardHeader}>
+              <div style={S.cardHeaderIcon}>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                >
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </div>
+              <h2 style={S.cardTitle}>Your Details</h2>
+            </div>
+
+            <div style={S.fieldGrid}>
+              <div style={S.fieldWrap}>
+                <label style={S.inputLabel}>
+                  Full Name <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  style={S.input}
+                  required
+                  placeholder="Your full name"
+                  value={respondent.name}
+                  onChange={(e) =>
+                    setRespondent({ ...respondent, name: e.target.value })
+                  }
+                />
+              </div>
+
+              <div style={S.fieldWrap}>
+                <label style={S.inputLabel}>Email Address</label>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={respondent.email}
+                  readOnly={isPersonalizedLink || Boolean(gateEmail)}
+                  onChange={(e) => {
+                    if (!isPersonalizedLink && !gateEmail) {
+                      setRespondent({ ...respondent, email: e.target.value });
+                    }
+                  }}
+                  style={{
+                    ...S.input,
+                    ...(isPersonalizedLink || gateEmail
+                      ? {
+                          background: "#f1f5f9",
+                          color: "#64748b",
+                          cursor: "not-allowed",
+                        }
+                      : {}),
+                  }}
+                />
+                {(isPersonalizedLink || Boolean(gateEmail)) && (
+                  <span
+                    style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}
+                  >
+                    ✅ Verified
+                  </span>
+                )}
+              </div>
+
+              {form.collectsPhone && (
+                <div style={S.fieldWrap}>
+                  <label style={S.inputLabel}>
+                    Phone{" "}
+                    {form.phoneRequired && (
+                      <span style={{ color: "#ef4444" }}>*</span>
+                    )}
+                  </label>
+                  <input
+                    type="tel"
+                    style={S.input}
+                    placeholder="+91 98765 43210"
+                    required={form.phoneRequired}
+                    value={respondent.phone}
+                    onChange={(e) =>
+                      setRespondent({ ...respondent, phone: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+
+              {form.collectsCompanyDetails && (
+                <div style={S.fieldWrap}>
+                  <label style={S.inputLabel}>
+                    Company / Organisation{" "}
+                    {form.companyDetailsRequired && (
+                      <span style={{ color: "#ef4444" }}>*</span>
+                    )}
+                  </label>
+                  <input
+                    style={S.input}
+                    placeholder="Your organisation"
+                    required={form.companyDetailsRequired}
+                    value={respondent.companyName}
+                    onChange={(e) =>
+                      setRespondent({
+                        ...respondent,
+                        companyName: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Questions */}
+          {(form.questions || []).map((q, idx) => (
+            <section
+              key={q.id || idx}
+              style={{
+                ...S.card,
+                ...(activeQ === (q.id || idx) ? S.cardFocused : {}),
+              }}
+              onClick={() => setActiveQ(q.id || idx)}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <div style={S.qNum}>{idx + 1}</div>
+                <label style={S.qPrompt}>
+                  {q.prompt}
+                  {q.required && (
+                    <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>
+                  )}
+                </label>
+              </div>
+
+              {q.type === "rating" && (
+                <StarRating
+                  value={answers[q.id] || ""}
+                  onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
+                />
+              )}
+
+              {q.type === "text" && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
+                >
+                  <textarea
+                    style={S.textarea}
+                    required={q.required}
+                    value={answers[q.id] || ""}
+                    onChange={(e) =>
+                      setAnswers({ ...answers, [q.id]: e.target.value })
+                    }
+                    placeholder="Share your thoughts…"
+                  />
+                  {q.answerTemplates?.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                        alignItems: "center",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: "#94a3b8",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        Quick fill:
+                      </span>
+                      {q.answerTemplates.slice(0, 3).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          style={S.templateBtn}
+                          onClick={() => setAnswers({ ...answers, [q.id]: t })}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {q.type === "single-choice" && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {(q.options || []).map((opt) => {
+                    const selected = answers[q.id] === opt;
+                    return (
+                      <label
+                        key={opt}
+                        style={{
+                          ...S.choiceLabel,
+                          ...(selected ? S.choiceLabelSelected : {}),
+                        }}
+                        onClick={() => setAnswers({ ...answers, [q.id]: opt })}
+                      >
+                        <div
+                          style={{
+                            ...S.choiceCircle,
+                            ...(selected ? S.choiceCircleSelected : {}),
+                          }}
+                        >
+                          {selected && (
+                            <div
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: "50%",
+                                background: "#fff",
+                              }}
+                            />
+                          )}
+                        </div>
+                        <input
+                          type="radio"
+                          style={{ display: "none" }}
+                          checked={selected}
+                          onChange={() =>
+                            setAnswers({ ...answers, [q.id]: opt })
+                          }
+                        />
+                        <span
+                          style={{
+                            fontSize: 14,
+                            fontWeight: selected ? 600 : 400,
+                          }}
+                        >
+                          {opt}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              {q.type === "multiple-choice" && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {(q.options || []).map((opt) => {
+                    const selected = (answers[q.id] || []).includes(opt);
+                    return (
+                      <label
+                        key={opt}
+                        style={{
+                          ...S.choiceLabel,
+                          ...(selected ? S.choiceLabelSelected : {}),
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 6,
+                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            transition: "all 0.15s",
+                            border: selected
+                              ? "2px solid #3b82f6"
+                              : "2px solid #e2e8f0",
+                            background: selected ? "#3b82f6" : "transparent",
+                          }}
+                        >
+                          {selected && (
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="white"
+                              strokeWidth="3"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </div>
+                        <input
+                          type="checkbox"
+                          style={{ display: "none" }}
+                          checked={selected}
+                          onChange={() => {
+                            const prev = answers[q.id] || [];
+                            setAnswers({
+                              ...answers,
+                              [q.id]: selected
+                                ? prev.filter((x) => x !== opt)
+                                : [...prev, opt],
+                            });
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 14,
+                            fontWeight: selected ? 600 : 400,
+                          }}
+                        >
+                          {opt}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ))}
+
+          {/* Error banner */}
+          {status.type === "error" && (
+            <div style={S.alertError}>
+              <span>⚠️</span>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#dc2626",
+                  fontWeight: 600,
+                  margin: 0,
+                }}
+              >
+                {status.message}
+              </p>
+            </div>
+          )}
+
+          {/* Submit */}
+          <button type="submit" style={S.submitBtn}>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            >
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+            Submit Feedback
+          </button>
+
+          <p
+            style={{
+              textAlign: "center",
+              fontSize: 11,
+              color: "#94a3b8",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              margin: 0,
+            }}
+          >
+            🔒 Secure · Confidential · Powered by Simtrak Feedback Hub
+          </p>
+        </form>
+      </div>
+    </main>
+  );
 };
 
+/* ─── Styles ──────────────────────────────────────────────────────────────── */
 const S = {
-    main:        { minHeight:'100vh', background:'#f8fafc', fontFamily:"'DM Sans', system-ui, sans-serif", paddingBottom:60 },
-    loadWrap:    { display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',gap:16 },
-    loadRing:    { width:40,height:40,border:'3px solid #e8ecf0',borderTopColor:'#3b82f6',borderRadius:'50%',animation:'spin 0.7s linear infinite' },
-    loadText:    { fontSize:12,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.1em' },
-    successWrap: { display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'linear-gradient(135deg,#f8fafc,#eff6ff)',padding:20,fontFamily:"'DM Sans',system-ui" },
-    successCard: { background:'#fff',borderRadius:20,padding:'48px 40px',textAlign:'center',maxWidth:440,boxShadow:'0 20px 60px rgba(59,130,246,0.12)',border:'1px solid #e8ecf0' },
-    successIcon: { width:72,height:72,borderRadius:20,background:'linear-gradient(135deg,#10b981,#059669)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px',boxShadow:'0 8px 24px rgba(16,185,129,0.35)' },
-    successTitle:{ fontSize:28,fontWeight:800,color:'#0f172a',margin:'0 0 8px',letterSpacing:'-0.02em' },
-    successDesc: { fontSize:14,color:'#64748b',lineHeight:1.6,margin:'0 0 12px' },
-    successDivider:{ height:1,background:'#f1f5f9',margin:'20px 0' },
-    hero:        { background:'linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1d4ed8 100%)',padding:'60px 20px',position:'relative',overflow:'hidden' },
-    heroInner:   { maxWidth:640,margin:'0 auto',position:'relative',zIndex:1 },
-    formTypePill:{ display:'inline-flex',alignItems:'center',gap:6,fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.8)',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.15)',padding:'6px 12px',borderRadius:99,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16 },
-    heroGreeting:{ fontSize:14,fontWeight:600,color:'rgba(255,255,255,0.85)',margin:'0 0 10px',letterSpacing:'0.01em' },
-    heroTitle:   { fontSize:30,fontWeight:800,color:'#fff',letterSpacing:'-0.02em',lineHeight:1.2,margin:'0 0 10px' },
-    heroDesc:    { fontSize:14,color:'rgba(255,255,255,0.7)',lineHeight:1.6,margin:0 },
-    heroDots:    { position:'absolute',right:-40,top:-40,width:300,height:300,background:'radial-gradient(circle,rgba(99,102,241,0.3) 0%,transparent 70%)',borderRadius:'50%' },
-    formWrap:    { maxWidth:680,margin:'0 auto',padding:'24px 20px' },
-    card:        { background:'#fff',borderRadius:14,border:'1px solid #e8ecf0',padding:'22px 24px',boxShadow:'0 1px 4px rgba(0,0,0,0.05)',transition:'border-color 0.2s, box-shadow 0.2s',cursor:'default' },
-    cardFocused: { borderColor:'#3b82f6',boxShadow:'0 0 0 3px rgba(59,130,246,0.1)' },
-    cardHeader:  { display:'flex',alignItems:'center',gap:10,marginBottom:18 },
-    cardIcon:    { fontSize:20 },
-    cardTitle:   { fontSize:13,fontWeight:700,color:'#0f172a',textTransform:'uppercase',letterSpacing:'0.06em',margin:0 },
-    inputWrap:   { display:'flex',flexDirection:'column',gap:6 },
-    inputLabel:  { fontSize:10,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.07em' },
-    input:       { width:'100%',background:'#f8fafc',border:'1.5px solid #e8ecf0',borderRadius:9,padding:'10px 14px',fontSize:13,color:'#0f172a',outline:'none',transition:'border 0.15s, background 0.15s',boxSizing:'border-box',fontFamily:"'DM Sans',system-ui" },
-    qNum:        { width:26,height:26,borderRadius:8,background:'#0f172a',color:'#fff',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 },
-    qPrompt:     { fontSize:14,fontWeight:700,color:'#0f172a',lineHeight:1.4 },
-    textarea:    { width:'100%',minHeight:100,background:'#f8fafc',border:'1.5px solid #e8ecf0',borderRadius:9,padding:'12px 14px',fontSize:13,color:'#0f172a',outline:'none',resize:'vertical',fontFamily:"'DM Sans',system-ui",lineHeight:1.6,boxSizing:'border-box' },
-    templateBtn: { fontSize:11,fontWeight:600,color:'#475569',background:'#f1f5f9',border:'1px solid #e8ecf0',borderRadius:99,padding:'5px 12px',cursor:'pointer',transition:'all 0.15s' },
-    choiceLabel: { display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderRadius:10,border:'1.5px solid #e8ecf0',cursor:'pointer',transition:'all 0.15s',background:'#fafbfc' },
-    choiceLabelSelected:{ borderColor:'#3b82f6',background:'#eff6ff',color:'#1d4ed8' },
-    choiceCircle:{ width:20,height:20,borderRadius:'50%',border:'2px solid #e8ecf0',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' },
-    choiceCircleSelected:{ border:'2px solid #3b82f6',background:'#3b82f6' },
-    submitBtn:   { display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',padding:'16px',background:'linear-gradient(135deg,#1e3a8a,#3b82f6)',color:'#fff',border:'none',borderRadius:14,fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:'0.02em',textTransform:'uppercase',boxShadow:'0 8px 24px rgba(59,130,246,0.35)',transition:'transform 0.15s, box-shadow 0.15s' },
+  main: {
+    minHeight: "100vh",
+    background: "#f1f5f9",
+    fontFamily: "'Outfit', system-ui, sans-serif",
+    paddingBottom: 72,
+  },
+  loadWrap: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "100vh",
+    background: "#f1f5f9",
+    gap: 16,
+  },
+  loadRing: {
+    width: 40,
+    height: 40,
+    border: "3px solid #e2e8f0",
+    borderTopColor: "#3b82f6",
+    borderRadius: "50%",
+    animation: "spin 0.7s linear infinite",
+  },
+  loadText: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: "0.1em",
+  },
+
+  /* Hero */
+  hero: {
+    background: "linear-gradient(135deg,#0c1445 0%,#1a2f7a 55%,#1e40af 100%)",
+    padding: "56px 20px 52px",
+    position: "relative",
+    overflow: "hidden",
+  },
+  heroNoise: {
+    position: "absolute",
+    inset: 0,
+    opacity: 0.04,
+    backgroundImage:
+      "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+    backgroundSize: "200px",
+  },
+  heroOrb: {
+    position: "absolute",
+    right: -60,
+    top: -60,
+    width: 340,
+    height: 340,
+    background:
+      "radial-gradient(circle,rgba(99,102,241,0.25) 0%,transparent 70%)",
+    borderRadius: "50%",
+    pointerEvents: "none",
+  },
+  heroInner: {
+    maxWidth: 660,
+    margin: "0 auto",
+    position: "relative",
+    zIndex: 1,
+  },
+  pill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 11,
+    fontWeight: 700,
+    color: "rgba(255,255,255,0.75)",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    padding: "5px 13px",
+    borderRadius: 99,
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    marginBottom: 14,
+  },
+  heroGreeting: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "rgba(255,255,255,0.8)",
+    margin: "0 0 8px",
+    letterSpacing: "0.01em",
+  },
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: 800,
+    color: "#fff",
+    letterSpacing: "-0.025em",
+    lineHeight: 1.15,
+    margin: "0 0 10px",
+  },
+  heroDesc: {
+    fontSize: 15,
+    color: "rgba(255,255,255,0.65)",
+    lineHeight: 1.65,
+    margin: "0 0 16px",
+  },
+  closingBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#fbbf24",
+    background: "rgba(251,191,36,0.12)",
+    border: "1px solid rgba(251,191,36,0.25)",
+    borderRadius: 99,
+    padding: "5px 12px",
+  },
+
+  /* Progress */
+  progressBar: { background: "#fff", borderBottom: "1px solid #e2e8f0" },
+  progressInner: {
+    maxWidth: 680,
+    margin: "0 auto",
+    padding: "10px 20px",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 3,
+    background: "#e2e8f0",
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    background: "linear-gradient(90deg,#3b82f6,#6366f1)",
+    borderRadius: 999,
+  },
+  progressLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#94a3b8",
+    whiteSpace: "nowrap",
+  },
+
+  /* Cards */
+  formWrap: { maxWidth: 700, margin: "0 auto", padding: "28px 20px" },
+  card: {
+    background: "#fff",
+    borderRadius: 16,
+    border: "1.5px solid #e2e8f0",
+    padding: "24px 26px",
+    boxShadow: "0 1px 6px rgba(0,0,0,0.04)",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+    cursor: "default",
+  },
+  cardFocused: {
+    borderColor: "#3b82f6",
+    boxShadow: "0 0 0 3px rgba(59,130,246,0.1)",
+  },
+  cardHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+  },
+  cardHeaderIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    background: "#eff6ff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#3b82f6",
+    flexShrink: 0,
+  },
+  cardTitle: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: "0.07em",
+    margin: 0,
+  },
+  fieldGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
+  fieldWrap: { display: "flex", flexDirection: "column", gap: 5 },
+
+  /* Inputs */
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.07em",
+  },
+  input: {
+    width: "100%",
+    background: "#f8fafc",
+    border: "1.5px solid #e2e8f0",
+    borderRadius: 10,
+    padding: "10px 14px",
+    fontSize: 14,
+    color: "#0f172a",
+    outline: "none",
+    transition: "border 0.15s, background 0.15s, box-shadow 0.15s",
+    boxSizing: "border-box",
+    fontFamily: "'Outfit', system-ui",
+  },
+  textarea: {
+    width: "100%",
+    minHeight: 108,
+    background: "#f8fafc",
+    border: "1.5px solid #e2e8f0",
+    borderRadius: 10,
+    padding: "12px 14px",
+    fontSize: 14,
+    color: "#0f172a",
+    outline: "none",
+    resize: "vertical",
+    fontFamily: "'Outfit', system-ui",
+    lineHeight: 1.65,
+    boxSizing: "border-box",
+    transition: "border 0.15s, box-shadow 0.15s",
+  },
+  templateBtn: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#475569",
+    background: "#f1f5f9",
+    border: "1px solid #e2e8f0",
+    borderRadius: 99,
+    padding: "5px 12px",
+    cursor: "pointer",
+    transition: "all 0.15s",
+    fontFamily: "'Outfit', system-ui",
+  },
+
+  /* Questions */
+  qNum: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    background: "#0f172a",
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 800,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  qPrompt: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: "#0f172a",
+    lineHeight: 1.45,
+  },
+
+  /* Choices */
+  choiceLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "12px 16px",
+    borderRadius: 11,
+    border: "1.5px solid #e2e8f0",
+    cursor: "pointer",
+    transition: "all 0.15s",
+    background: "#fafbfc",
+    userSelect: "none",
+  },
+  choiceLabelSelected: { borderColor: "#3b82f6", background: "#eff6ff" },
+  choiceCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    border: "2px solid #e2e8f0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    transition: "all 0.15s",
+  },
+  choiceCircleSelected: { border: "2px solid #3b82f6", background: "#3b82f6" },
+
+  /* Submit */
+  submitBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    width: "100%",
+    padding: "16px",
+    background: "linear-gradient(135deg,#1e3a8a,#2563eb)",
+    color: "#fff",
+    border: "none",
+    borderRadius: 14,
+    fontSize: 15,
+    fontWeight: 800,
+    cursor: "pointer",
+    letterSpacing: "0.02em",
+    textTransform: "uppercase",
+    boxShadow: "0 8px 24px rgba(37,99,235,0.38)",
+    transition: "transform 0.15s, box-shadow 0.15s",
+    fontFamily: "'Outfit', system-ui",
+  },
+
+  /* Alerts */
+  alertError: {
+    background: "#fff5f5",
+    border: "1px solid #fecaca",
+    borderRadius: 12,
+    padding: "13px 16px",
+    display: "flex",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+
+  /* Success / Already responded */
+  successWrap: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#f1f5f9,#eff6ff)",
+    padding: 20,
+    fontFamily: "'Outfit', system-ui",
+  },
+  successCard: {
+    background: "#fff",
+    borderRadius: 22,
+    padding: "52px 44px",
+    textAlign: "center",
+    maxWidth: 460,
+    boxShadow: "0 24px 64px rgba(59,130,246,0.1)",
+    border: "1px solid #e2e8f0",
+  },
+  successIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    background: "linear-gradient(135deg,#10b981,#059669)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: "0 auto 22px",
+    boxShadow: "0 10px 28px rgba(16,185,129,0.32)",
+  },
+  successTitle: {
+    fontSize: 28,
+    fontWeight: 800,
+    color: "#0f172a",
+    margin: "0 0 10px",
+    letterSpacing: "-0.02em",
+  },
+  successDesc: {
+    fontSize: 15,
+    color: "#64748b",
+    lineHeight: 1.65,
+    margin: "0 0 12px",
+  },
+  successDivider: { height: 1, background: "#f1f5f9", margin: "22px 0" },
+
+  /* Email gate */
+  gateWrap: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#f1f5f9,#eff6ff)",
+    padding: 20,
+    fontFamily: "'Outfit', system-ui",
+  },
+  gateCard: {
+    background: "#fff",
+    borderRadius: 22,
+    padding: "48px 44px",
+    maxWidth: 440,
+    width: "100%",
+    boxShadow: "0 24px 64px rgba(59,130,246,0.1)",
+    border: "1px solid #e2e8f0",
+    display: "flex",
+    flexDirection: "column",
+    gap: 18,
+  },
+  gateIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    background: "#eff6ff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gateTitle: {
+    fontSize: 22,
+    fontWeight: 800,
+    color: "#0f172a",
+    margin: 0,
+    letterSpacing: "-0.02em",
+  },
+  gateDesc: { fontSize: 14, color: "#64748b", lineHeight: 1.65, margin: 0 },
 };
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
 @keyframes spin { to { transform: rotate(360deg); } }
-input:focus, textarea:focus { border-color: #3b82f6 !important; background: #fff !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.08) !important; }
-button[type="submit"]:hover { transform: translateY(-1px) !important; box-shadow: 0 12px 32px rgba(59,130,246,0.45) !important; }
+input:focus, textarea:focus {
+  border-color: #3b82f6 !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1) !important;
+}
+button[type="submit"]:hover:not(:disabled) { transform: translateY(-1px) !important; box-shadow: 0 14px 36px rgba(37,99,235,0.48) !important; }
 button[type="submit"]:active { transform: translateY(0) !important; }
+button[type="submit"]:disabled { opacity: 0.55; cursor: not-allowed; }
+label:hover > div[style*="border-radius: 11px"] { border-color: #93c5fd !important; }
 @media (max-width: 600px) {
   div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
 }

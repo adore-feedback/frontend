@@ -93,3 +93,18 @@ export const deleteForm = (formId) =>
   request(`/forms/${encodeURIComponent(formId)}`, {
     method: 'DELETE',
   });
+
+// export const updateFormSettings = (formId, settings) =>
+//   request(`/forms/${encodeURIComponent(formId)}/settings`, {
+//     method: 'PATCH',
+//     body: JSON.stringify(settings),
+//   });
+
+export const updateFormSettings = (formId, settings) => {
+  console.log("CALLING SETTINGS API:", formId, settings);
+
+  return request(`/forms/${encodeURIComponent(formId)}/settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  });
+};
