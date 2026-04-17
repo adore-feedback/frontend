@@ -21,13 +21,38 @@ const request = async (path, options = {}) => {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.message || 'Request failed.');
+    // Preserve status and error code so callers can inspect them
+    const err = new Error(payload.message || 'Request failed.');
+    err.status = response.status;
+    err.code = payload.code;
+    throw err;
   }
 
   return payload;
 };
 
-export const getForms = () => request('/forms');
+/**
+ * Get all forms for the current user.
+ * @param {Object} filters - Optional filters
+ * @param {string} filters.search - Filter by form name/title (server-side, case-insensitive)
+ * @param {string} filters.status - Filter by status: 'draft' | 'live' | 'closed'
+ */
+export const getForms = (filters = {}) => {
+  const params = new URLSearchParams();
+
+  // Server-side search by form name
+  if (filters.search && filters.search.trim()) {
+    params.set('search', filters.search.trim());
+  }
+
+  // Status filter (handled client-side if not supported by server, but passed anyway)
+  if (filters.status) {
+    params.set('status', filters.status);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return request(`/forms${query}`);
+};
 
 /**
  * Get a single form by ID (admin, includes all fields).
@@ -56,7 +81,9 @@ export const createForm = (form) =>
   });
 
 /**
- * Update an existing form (full or partial).
+ * Update an existing form's content (questions, title, description, etc.).
+ * Does NOT update settings (status, visibility, availability, etc.).
+ * Use updateFormSettings for those.
  * Uses PATCH /api/forms/:formId
  */
 export const updateForm = (formId, form) =>
@@ -87,22 +114,20 @@ export const submitPublicFormResponse = (formId, payload) =>
 
 /**
  * Deletes a specific form by ID.
- * Method: DELETE
+ * NOTE: Responses are preserved on the server — only the form definition is removed.
  */
 export const deleteForm = (formId) =>
   request(`/forms/${encodeURIComponent(formId)}`, {
     method: 'DELETE',
   });
 
-// export const updateFormSettings = (formId, settings) =>
-//   request(`/forms/${encodeURIComponent(formId)}/settings`, {
-//     method: 'PATCH',
-//     body: JSON.stringify(settings),
-//   });
-
+/**
+ * Update form settings separately from content.
+ * Handles: status, visibility, slug, availability, allowedRespondents,
+ *          personalizations, duplicateCheckFields.
+ */
 export const updateFormSettings = (formId, settings) => {
-  console.log("CALLING SETTINGS API:", formId, settings);
-
+  console.log('CALLING SETTINGS API:', formId, settings);
   return request(`/forms/${encodeURIComponent(formId)}/settings`, {
     method: 'PATCH',
     body: JSON.stringify(settings),

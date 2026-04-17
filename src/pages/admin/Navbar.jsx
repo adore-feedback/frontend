@@ -79,17 +79,21 @@ const Navbar = () => {
       {/* Brand */}
       <div className="nb-brand">
         <div>
-          <span className="block text-[20px] font-extrabold text-slate-900 tracking-tight">
+          <span className="block text-[20px] font-extrabold text-black tracking-tight">
             Feedback Portal
           </span>
 
-          <span className="block text-[12px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-            Simtrak Solutions
+          <span className="block text-[11px] font-medium text-gray-500 tracking-wide leading-tight text-center">
+            Powered by <span className="font-semibold text-blue-900"> Simtrak Solutions </span>
           </span>
 
-          {/* Your Image */}
           <img
-            src="/simtrak.png" // change this
+            src="/simtrak.png"
+            alt="brand"
+            className="mt-3 w-full rounded-lg object-cover"
+          />
+          <img
+            src="/adore.jpeg"
             alt="brand"
             className="mt-3 w-full rounded-lg object-cover"
           />
@@ -292,9 +296,13 @@ const CSS = `
 /* ── Brand ── */
 .nb-brand {
     display: flex; align-items: center; gap: 10px;
+    justify-content: center;
     padding: 20px 16px 16px;
     border-bottom: 1px solid #f1f5f9;
+    margin-top: 13px; 
 }
+.nb-brand div{
+text-align: center;}
 .nb-logo-mark {
     width: 32px; height: 32px; border-radius: 9px;
     background: linear-gradient(135deg, #1e3a8a, #3b82f6);

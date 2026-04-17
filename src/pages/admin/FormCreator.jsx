@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Link, useBlocker, useParams } from "react-router-dom";
-import { createForm, updateForm, getForm } from "../../api/feedbackApi";
+import { createForm, updateForm, updateFormSettings, getForm } from "../../api/feedbackApi";
 
 /* ─── helpers ──────────────────────────────────────── */
 const DRAFT_KEY = "simtrak_form_draft";
+const TEMPLATES_KEY = "simtrak_question_templates";
+
 const emptyQuestion = () => ({
   prompt: "",
   type: "text",
@@ -11,11 +13,13 @@ const emptyQuestion = () => ({
   optionsText: "",
   answerTemplatesText: "",
 });
+
 const splitList = (v) =>
   v
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+
 const saveDraft = (data) => {
   try {
     localStorage.setItem(
@@ -36,6 +40,51 @@ const clearDraft = () => {
   try {
     localStorage.removeItem(DRAFT_KEY);
   } catch {}
+};
+
+/* ── Question template persistence ── */
+const loadSavedTemplates = () => {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+const saveTemplate = (tpl) => {
+  try {
+    const existing = loadSavedTemplates();
+    // Avoid exact-prompt duplicates — update savedAt instead
+    const filtered = existing.filter((t) => t.prompt !== tpl.prompt);
+    const updated = [{ ...tpl, savedAt: Date.now() }, ...filtered];
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
+    return updated;
+  } catch {
+    return [];
+  }
+};
+const deleteTemplate = (prompt) => {
+  try {
+    const existing = loadSavedTemplates();
+    const updated = existing.filter((t) => t.prompt !== prompt);
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
+    return updated;
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Compute a default closesAt value.
+ * Flash forms: required (no default — user must set).
+ * All others: default to now + 5 days.
+ */
+const defaultClosesAt = (formType) => {
+  if (formType === "flash") return ""; // must be set explicitly
+  const d = new Date();
+  d.setDate(d.getDate() + 5);
+  // datetime-local format: YYYY-MM-DDTHH:mm
+  return d.toISOString().slice(0, 16);
 };
 
 /** Convert a saved form (from API) back to FormCreator's working state shape */
@@ -67,7 +116,7 @@ const formToState = (apiForm) => ({
   personalizations: apiForm.personalizations || [],
 });
 
-const QUESTION_TEMPLATES = [
+const BUILTIN_QUESTION_TEMPLATES = [
   {
     label: "Overall Rating",
     prompt: "How would you rate your overall experience?",
@@ -239,7 +288,7 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
   );
 };
 
-/* ── PersonalizedLinksPanel — shown after publish for restricted forms ── */
+/* ── PersonalizedLinksPanel ── */
 const PersonalizedLinksPanel = ({
   formId,
   formSlug,
@@ -326,9 +375,57 @@ const PersonalizedLinksPanel = ({
   );
 };
 
+/* ── SavedTemplatesPanel ── */
+const SavedTemplatesPanel = ({ savedTemplates, onUse, onDelete }) => {
+  const [open, setOpen] = useState(false);
+  if (!savedTemplates.length) return null;
+  return (
+    <div className="fc-saved-tpl-wrap">
+      <button
+        type="button"
+        className="fc-saved-tpl-toggle"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+        My Templates ({savedTemplates.length})
+        <span style={{ marginLeft: "auto", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="fc-saved-tpl-list">
+          {savedTemplates.map((t) => (
+            <div key={t.prompt} className="fc-saved-tpl-row">
+              <div className="fc-saved-tpl-info">
+                <span className="fc-saved-tpl-prompt">{t.prompt}</span>
+                <span className="fc-saved-tpl-meta">
+                  {QTYPE_ICONS[t.type] || "❓"} {t.type}
+                  {t.savedAt ? ` · ${new Date(t.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                </span>
+              </div>
+              <button type="button" className="fc-template-chip" onClick={() => onUse(t)}>
+                + Use
+              </button>
+              <button
+                type="button"
+                className="fc-q-icon-btn fc-q-icon-btn--danger"
+                style={{ width: 24, height: 24, fontSize: 11 }}
+                onClick={() => onDelete(t.prompt)}
+                title="Delete template"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
-  // editFormId is set when navigating to /admin/forms/edit/:editFormId
   const { editFormId } = useParams();
   const isEditMode = !!editFormId;
 
@@ -343,9 +440,10 @@ const FormCreator = () => {
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingEdit, setIsLoadingEdit] = useState(isEditMode);
-  const [savedFormId, setSavedFormId] = useState(
-    isEditMode ? editFormId : null,
-  );
+  const [savedFormId, setSavedFormId] = useState(isEditMode ? editFormId : null);
+  const [savedTemplates, setSavedTemplates] = useState(loadSavedTemplates);
+  // Track which question index is being saved as template
+  const [savingTplIdx, setSavingTplIdx] = useState(null);
   const autoSaveTimerRef = useRef(null);
 
   /* ── Load existing form when in edit mode ── */
@@ -358,13 +456,9 @@ const FormCreator = () => {
         const apiForm = data.form || data;
         setForm(formToState(apiForm));
         setSavedFormId(apiForm._id || apiForm.id || editFormId);
-        // Don't show local draft banner when editing a server-saved form
         clearDraft();
       } catch (err) {
-        setStatus({
-          type: "error",
-          message: `Could not load form: ${err.message}`,
-        });
+        setStatus({ type: "error", message: `Could not load form: ${err.message}` });
       } finally {
         setIsLoadingEdit(false);
       }
@@ -379,22 +473,33 @@ const FormCreator = () => {
     if (d && d._savedAt) setDraftData(d);
   }, [isEditMode]);
 
-  /* ── Debounced auto-save to localStorage on change ── */
+  /* ── When formType changes, set default closesAt (for new forms only) ── */
+  useEffect(() => {
+    if (isEditMode) return;
+    if (!form.formType) return;
+    if (form.formType !== "flash" && !form.closesAt) {
+      setForm((c) => ({ ...c, closesAt: defaultClosesAt(c.formType) }));
+    }
+    // Flash: clear the auto-default if it was set
+    if (form.formType === "flash" && form.closesAt === defaultClosesAt("webinar")) {
+      setForm((c) => ({ ...c, closesAt: "" }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.formType, isEditMode]);
+
+  /* ── Debounced auto-save to localStorage ── */
   useEffect(() => {
     if (!isDirty) return;
     clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      saveDraft(form);
-    }, 3000);
+    autoSaveTimerRef.current = setTimeout(() => { saveDraft(form); }, 3000);
     return () => clearTimeout(autoSaveTimerRef.current);
   }, [form, isDirty]);
 
-  /* ── Block navigation when dirty: auto-save draft first, then proceed ── */
+  /* ── Block navigation when dirty ── */
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       isDirty && currentLocation.pathname !== nextLocation.pathname,
   );
-
   useEffect(() => {
     if (blocker.state === "blocked") {
       saveDraft(form);
@@ -434,20 +539,17 @@ const FormCreator = () => {
     setIsDirty(true);
   };
   const removeQuestion = (idx) => {
-    setForm((c) => ({
-      ...c,
-      questions: c.questions.filter((_, i) => i !== idx),
-    }));
+    setForm((c) => ({ ...c, questions: c.questions.filter((_, i) => i !== idx) }));
     setIsDirty(true);
   };
   const addTemplate = (t) => {
+    const { label, savedAt, ...rest } = t;
     setForm((c) => ({
       ...c,
-      questions: [...c.questions, { ...emptyQuestion(), ...t }],
+      questions: [...c.questions, { ...emptyQuestion(), ...rest }],
     }));
     setIsDirty(true);
   };
-
   const moveQuestion = (idx, dir) => {
     setForm((c) => {
       const qs = [...c.questions];
@@ -459,23 +561,40 @@ const FormCreator = () => {
     setIsDirty(true);
   };
 
+  /* ── Save current question as template ── */
+  const handleSaveAsTemplate = (idx) => {
+    const q = form.questions[idx];
+    if (!q.prompt.trim()) return;
+    setSavingTplIdx(idx);
+    const tpl = {
+      prompt: q.prompt,
+      type: q.type,
+      required: q.required,
+      optionsText: q.optionsText,
+      answerTemplatesText: q.answerTemplatesText,
+    };
+    const updated = saveTemplate(tpl);
+    setSavedTemplates(updated);
+    setTimeout(() => setSavingTplIdx(null), 1200);
+  };
+
+  const handleDeleteTemplate = (prompt) => {
+    const updated = deleteTemplate(prompt);
+    setSavedTemplates(updated);
+  };
+
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
-  /* ── Build API payload ── */
-  const buildPayload = () => ({
-    ...form,
-
-    // ❌ REMOVE SETTINGS FROM HERE
-    status: undefined,
-    visibility: undefined,
-    slug: undefined,
-    allowedRespondents: undefined,
-    availability: undefined,
-    duplicateCheckFields: undefined,
-
-    // ✅ KEEP THESE
+  /* ── Build content payload (questions + basic info, NO settings) ── */
+  const buildContentPayload = () => ({
+    title: form.title,
+    description: form.description,
+    formType: form.formType,
+    collectsPhone: form.collectsPhone,
+    phoneRequired: form.phoneRequired,
+    collectsCompanyDetails: form.collectsCompanyDetails,
+    companyDetailsRequired: form.companyDetailsRequired,
     personalizations: form.personalizations,
-
     questions: form.questions.map((q) => ({
       ...q,
       options: splitList(q.optionsText),
@@ -483,29 +602,41 @@ const FormCreator = () => {
     })),
   });
 
+  /* ── Build settings payload (sent to /settings endpoint) ── */
+  const buildSettingsPayload = (overrideStatus) => ({
+    status: overrideStatus || form.status,
+    visibility: form.visibility,
+    allowedRespondents,
+    personalizations: form.personalizations,
+    duplicateCheckFields: form.duplicateCheckFields,
+    availability: {
+      opensAt: form.opensAt || null,
+      closesAt: form.closesAt || null,
+      singleSession: form.singleSession,
+      sessionKey: form.sessionKey,
+    },
+  });
+
   /* ── Save as Draft (to server) ── */
   const saveDraftToServer = async () => {
     setIsSaving(true);
-    const payload = buildPayload();
     try {
-      let data;
-      if (savedFormId) {
-        data = await updateForm(savedFormId, payload);
+      let fId = savedFormId;
+      const contentPayload = buildContentPayload();
+      if (fId) {
+        await updateForm(fId, contentPayload);
       } else {
-        data = await createForm(payload);
-        setSavedFormId(data.form._id || data.form.id);
+        const data = await createForm({ ...contentPayload, status: "draft" });
+        fId = data.form._id || data.form.id;
+        setSavedFormId(fId);
       }
+      // Now save settings separately
+      await updateFormSettings(fId, buildSettingsPayload("draft"));
       clearDraft();
       setIsDirty(false);
-      setStatus({
-        type: "draft",
-        message: "Draft saved. You can continue editing or publish it later.",
-      });
+      setStatus({ type: "draft", message: "Draft saved. You can continue editing or publish it later." });
     } catch (err) {
-      setStatus({
-        type: "error",
-        message: err.message || "Could not save draft.",
-      });
+      setStatus({ type: "error", message: err.message || "Could not save draft." });
     } finally {
       setIsSaving(false);
     }
@@ -514,18 +645,31 @@ const FormCreator = () => {
   /* ── Publish / Submit ── */
   const submitForm = async (e) => {
     e.preventDefault();
+    // Flash forms must have a closing time
+    if (form.formType === "flash" && !form.closesAt) {
+      setStatus({ type: "error", message: "Flash forms must have a closing time. Please set it in Settings." });
+      setActiveSection("settings");
+      return;
+    }
     setStatus({ type: "", message: "", link: "" });
-    const payload = buildPayload(form.status);
     setIsSaving(true);
     try {
-      let data;
-      if (savedFormId) {
-        data = await updateForm(savedFormId, payload);
+      let fId = savedFormId;
+      const contentPayload = buildContentPayload();
+      let fSlug;
+      if (fId) {
+        const data = await updateForm(fId, contentPayload);
+        fSlug = data.form?.slug || fId;
       } else {
-        data = await createForm({ ...payload, status: "live" });
+        const data = await createForm({ ...contentPayload, status: "draft" });
+        fId = data.form._id || data.form.id;
+        fSlug = data.form?.slug || fId;
+        setSavedFormId(fId);
       }
-      const fId = data.form._id || data.form.id;
-      const fSlug = data.form.slug || fId;
+      // Push settings + go live
+      const settingsData = await updateFormSettings(fId, buildSettingsPayload("live"));
+      fSlug = settingsData.form?.slug || fSlug;
+
       setPublishedFormId(fId);
       setPublishedSlug(fSlug);
       setShareUrl(`${window.location.origin}/form/${fSlug}`);
@@ -538,10 +682,7 @@ const FormCreator = () => {
       setIsDirty(false);
       setActiveSection("done");
     } catch (err) {
-      setStatus({
-        type: "error",
-        message: err.message || "Could not publish form.",
-      });
+      setStatus({ type: "error", message: err.message || "Could not publish form." });
     } finally {
       setIsSaving(false);
     }
@@ -557,39 +698,16 @@ const FormCreator = () => {
   const SECTIONS = [
     { id: "info", label: "General Info", icon: "📋" },
     { id: "settings", label: "Settings", icon: "⚙️" },
-    {
-      id: "questions",
-      label: `Questions (${form.questions.length})`,
-      icon: "❓",
-    },
+    { id: "questions", label: `Questions (${form.questions.length})`, icon: "❓" },
   ];
 
   if (isLoadingEdit)
     return (
       <main className="fc-main">
         <style>{CSS}</style>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 300,
-            gap: 12,
-          }}
-        >
-          <span
-            className="fc-spinner"
-            style={{
-              width: 28,
-              height: 28,
-              border: "3px solid #e8ecf0",
-              borderTopColor: "#3b82f6",
-            }}
-          />
-          <p style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>
-            Loading form…
-          </p>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, gap: 12 }}>
+          <span className="fc-spinner" style={{ width: 28, height: 28, border: "3px solid #e8ecf0", borderTopColor: "#3b82f6" }} />
+          <p style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading form…</p>
         </div>
       </main>
     );
@@ -599,28 +717,15 @@ const FormCreator = () => {
       <style>{CSS}</style>
       <main className="fc-main">
         <div className="fc-wrap">
-          {/* Draft restore banner — only for new forms */}
           {!isEditMode && draftData && (
-            <DraftBanner
-              draft={draftData}
-              onRestore={restoreDraft}
-              onDiscard={discardDraft}
-            />
+            <DraftBanner draft={draftData} onRestore={restoreDraft} onDiscard={discardDraft} />
           )}
 
           {/* Header */}
           <div className="fc-header">
             <div>
               <Link to="/admin" className="fc-back-link">
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
                 Back to Dashboard
@@ -629,43 +734,20 @@ const FormCreator = () => {
                 {isEditMode ? "✏️ Edit Draft Form" : "Create New Form"}
               </h1>
               {isEditMode && (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "#94a3b8",
-                    margin: "4px 0 0",
-                    fontWeight: 500,
-                  }}
-                >
-                  Picking up where you left off — changes auto-save to your
-                  draft.
+                <p style={{ fontSize: 12, color: "#94a3b8", margin: "4px 0 0", fontWeight: 500 }}>
+                  Picking up where you left off — changes auto-save to your draft.
                 </p>
               )}
             </div>
             {activeSection !== "done" && (
               <div className="fc-header-actions">
                 {isDirty && (
-                  <button
-                    type="button"
-                    className="fc-save-draft-btn"
-                    onClick={saveDraftToServer}
-                    disabled={isSaving}
-                  >
+                  <button type="button" className="fc-save-draft-btn" onClick={saveDraftToServer} disabled={isSaving}>
                     {isSaving ? (
-                      <>
-                        <span className="fc-spinner" /> Saving…
-                      </>
+                      <><span className="fc-spinner" /> Saving…</>
                     ) : (
                       <>
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                        >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
                           <polyline points="17 21 17 13 7 13 7 21" />
                         </svg>
@@ -674,22 +756,8 @@ const FormCreator = () => {
                     )}
                   </button>
                 )}
-
-                <button
-                  form="creator-form"
-                  type="submit"
-                  className="fc-publish-btn"
-                  disabled={isSaving}
-                >
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                  >
+                <button form="creator-form" type="submit" className="fc-publish-btn" disabled={isSaving}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                   Publish
@@ -698,18 +766,10 @@ const FormCreator = () => {
             )}
           </div>
 
-          {/* Draft-saved status */}
+          {/* Status banners */}
           {status.type === "draft" && (
             <div className="fc-status fc-status--draft">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#92400e"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
               </svg>
@@ -717,43 +777,28 @@ const FormCreator = () => {
             </div>
           )}
 
-          {/* Published — personalized links */}
           {status.type === "success" && activeSection === "done" && (
             <div className="fc-status fc-status--success">
               <span>✅</span>
               <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: 700, fontSize: 14, margin: "0 0 8px" }}>
-                  {status.message}
-                </p>
+                <p style={{ fontWeight: 700, fontSize: 14, margin: "0 0 8px" }}>{status.message}</p>
                 {shareUrl && (
                   <div className="fc-share-row">
                     <code className="fc-share-code">{shareUrl}</code>
-                    <button
-                      type="button"
-                      className="fc-copy-btn"
-                      onClick={copyLink}
-                    >
+                    <button type="button" className="fc-copy-btn" onClick={copyLink}>
                       {copied ? "✓ Copied" : "Copy"}
                     </button>
-                    <Link
-                      to={status.link}
-                      target="_blank"
-                      className="fc-open-btn"
-                    >
-                      Open ↗
-                    </Link>
+                    <Link to={status.link} target="_blank" className="fc-open-btn">Open ↗</Link>
                   </div>
                 )}
-                {/* Personalized links for restricted forms */}
-                {form.visibility === "restricted" &&
-                  allowedRespondents.length > 0 && (
-                    <PersonalizedLinksPanel
-                      formId={publishedFormId}
-                      formSlug={publishedSlug}
-                      personalizations={form.personalizations}
-                      allowedRespondents={allowedRespondents}
-                    />
-                  )}
+                {form.visibility === "restricted" && allowedRespondents.length > 0 && (
+                  <PersonalizedLinksPanel
+                    formId={publishedFormId}
+                    formSlug={publishedSlug}
+                    personalizations={form.personalizations}
+                    allowedRespondents={allowedRespondents}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -777,20 +822,17 @@ const FormCreator = () => {
 
           {activeSection !== "done" && (
             <form id="creator-form" onSubmit={submitForm}>
+
               {/* ── Section: General Info ── */}
               {activeSection === "info" && (
                 <div className="fc-section">
                   <div className="fc-section-header">
                     <h2 className="fc-section-title">General Information</h2>
-                    <p className="fc-section-desc">
-                      Set up the basic details for your form
-                    </p>
+                    <p className="fc-section-desc">Set up the basic details for your form</p>
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
-                      <label className="fc-label">
-                        Form Title <span className="fc-req">*</span>
-                      </label>
+                      <label className="fc-label">Form Title <span className="fc-req">*</span></label>
                       <input
                         className="fc-input"
                         required
@@ -800,16 +842,12 @@ const FormCreator = () => {
                       />
                     </div>
                     <div className="fc-field">
-                      <label className="fc-label">
-                        Form Type <span className="fc-req">*</span>
-                      </label>
+                      <label className="fc-label">Form Type <span className="fc-req">*</span></label>
                       <select
                         className="fc-input"
                         required
                         value={form.formType}
-                        onChange={(e) =>
-                          updateField("formType", e.target.value)
-                        }
+                        onChange={(e) => updateField("formType", e.target.value)}
                       >
                         <option value="">Select a type…</option>
                         <option value="webinar">🎙️ Webinar Form</option>
@@ -823,9 +861,7 @@ const FormCreator = () => {
                       <textarea
                         className="fc-input fc-textarea"
                         value={form.description}
-                        onChange={(e) =>
-                          updateField("description", e.target.value)
-                        }
+                        onChange={(e) => updateField("description", e.target.value)}
                         placeholder="Briefly describe the purpose of this form…"
                       />
                     </div>
@@ -853,21 +889,9 @@ const FormCreator = () => {
 
                   <div className="fc-nav-row">
                     <span />
-                    <button
-                      type="button"
-                      className="fc-next-btn"
-                      onClick={() => setActiveSection("settings")}
-                    >
+                    <button type="button" className="fc-next-btn" onClick={() => setActiveSection("settings")}>
                       Next: Settings
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                      >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                         <path d="M5 12h14M12 5l7 7-7 7" />
                       </svg>
                     </button>
@@ -880,18 +904,12 @@ const FormCreator = () => {
                 <div className="fc-section">
                   <div className="fc-section-header">
                     <h2 className="fc-section-title">Form Settings</h2>
-                    <p className="fc-section-desc">
-                      Configure availability, access, and restrictions
-                    </p>
+                    <p className="fc-section-desc">Configure availability, access, and restrictions</p>
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
                       <label className="fc-label">Initial Status</label>
-                      <select
-                        className="fc-input"
-                        value={form.status}
-                        onChange={(e) => updateField("status", e.target.value)}
-                      >
+                      <select className="fc-input" value={form.status} onChange={(e) => updateField("status", e.target.value)}>
                         <option value="draft">Draft</option>
                         <option value="live">Live</option>
                         <option value="closed">Closed</option>
@@ -899,13 +917,7 @@ const FormCreator = () => {
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">Visibility</label>
-                      <select
-                        className="fc-input"
-                        value={form.visibility}
-                        onChange={(e) =>
-                          updateField("visibility", e.target.value)
-                        }
-                      >
+                      <select className="fc-input" value={form.visibility} onChange={(e) => updateField("visibility", e.target.value)}>
                         <option value="public">🌐 Public Link</option>
                         <option value="restricted">🔒 Restricted Users</option>
                       </select>
@@ -921,56 +933,51 @@ const FormCreator = () => {
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">
-                        Closes At <span className="fc-hint">(optional)</span>
+                        Closes At{" "}
+                        {form.formType === "flash"
+                          ? <span className="fc-req">*</span>
+                          : <span className="fc-hint">(defaults to 5 days)</span>
+                        }
                       </label>
                       <input
                         className="fc-input"
                         type="datetime-local"
+                        required={form.formType === "flash"}
                         value={form.closesAt}
-                        onChange={(e) =>
-                          updateField("closesAt", e.target.value)
-                        }
+                        onChange={(e) => updateField("closesAt", e.target.value)}
                       />
+                      {form.formType === "flash" && !form.closesAt && (
+                        <span style={{ fontSize: 10, color: "#ef4444", marginTop: 2 }}>
+                          Flash forms require a closing time.
+                        </span>
+                      )}
                     </div>
                     {form.visibility === "restricted" && (
                       <div className="fc-field fc-field--full">
                         <label className="fc-label">
-                          Allowed Respondents{" "}
-                          <span className="fc-hint">
-                            (comma-separated emails or IDs)
-                          </span>
+                          Allowed Respondents <span className="fc-hint">(comma-separated emails or IDs)</span>
                         </label>
                         <textarea
                           className="fc-input fc-textarea"
                           style={{ height: 68 }}
                           placeholder="user1@example.com, user2@example.com"
                           value={form.allowedRespondentsText}
-                          onChange={(e) =>
-                            updateField(
-                              "allowedRespondentsText",
-                              e.target.value,
-                            )
-                          }
+                          onChange={(e) => updateField("allowedRespondentsText", e.target.value)}
                         />
                       </div>
                     )}
                   </div>
 
-                  {/* Personalization — only for restricted forms */}
                   {form.visibility === "restricted" && (
                     <>
                       <div className="fc-divider" />
                       <div className="fc-personalization-header">
-                        <p className="fc-sub-label" style={{ margin: 0 }}>
-                          Personalization
-                        </p>
+                        <p className="fc-sub-label" style={{ margin: 0 }}>Personalization</p>
                         <span className="fc-badge-info">Restricted only</span>
                       </div>
                       <p className="fc-personalization-hint">
-                        Pre-fill greeting names and company details per
-                        respondent. After publishing, you'll get unique links
-                        like <code>?name=John&amp;email=…</code> for each
-                        person.
+                        Pre-fill greeting names and company details per respondent. After publishing,
+                        you'll get unique links like <code>?name=John&amp;email=…</code> for each person.
                       </p>
                       <PersonalizationEditor
                         respondents={allowedRespondents}
@@ -981,9 +988,7 @@ const FormCreator = () => {
                   )}
 
                   <div className="fc-divider" />
-                  <p className="fc-sub-label">
-                    Duplicate Submission Prevention
-                  </p>
+                  <p className="fc-sub-label">Duplicate Submission Prevention</p>
                   <div className="fc-chip-row">
                     {[
                       ["email", "📧 Email"],
@@ -1010,28 +1015,10 @@ const FormCreator = () => {
                   </div>
 
                   <div className="fc-nav-row">
-                    <button
-                      type="button"
-                      className="fc-ghost-btn"
-                      onClick={() => setActiveSection("info")}
-                    >
-                      ← Back
-                    </button>
-                    <button
-                      type="button"
-                      className="fc-next-btn"
-                      onClick={() => setActiveSection("questions")}
-                    >
+                    <button type="button" className="fc-ghost-btn" onClick={() => setActiveSection("info")}>← Back</button>
+                    <button type="button" className="fc-next-btn" onClick={() => setActiveSection("questions")}>
                       Next: Questions
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                      >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                         <path d="M5 12h14M12 5l7 7-7 7" />
                       </svg>
                     </button>
@@ -1046,24 +1033,11 @@ const FormCreator = () => {
                     <div>
                       <h2 className="fc-section-title">Form Questions</h2>
                       <p className="fc-section-desc">
-                        {form.questions.length} question
-                        {form.questions.length !== 1 ? "s" : ""} added
+                        {form.questions.length} question{form.questions.length !== 1 ? "s" : ""} added
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      className="fc-add-q-btn"
-                      onClick={addQuestion}
-                    >
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                      >
+                    <button type="button" className="fc-add-q-btn" onClick={addQuestion}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                         <line x1="12" y1="5" x2="12" y2="19" />
                         <line x1="5" y1="12" x2="19" y2="12" />
                       </svg>
@@ -1071,20 +1045,22 @@ const FormCreator = () => {
                     </button>
                   </div>
 
-                  {/* Quick templates */}
+                  {/* Built-in quick templates */}
                   <div className="fc-template-row">
-                    <span className="fc-template-label">Templates:</span>
-                    {QUESTION_TEMPLATES.map((t) => (
-                      <button
-                        key={t.label}
-                        type="button"
-                        className="fc-template-chip"
-                        onClick={() => addTemplate(t)}
-                      >
+                    <span className="fc-template-label">Quick add:</span>
+                    {BUILTIN_QUESTION_TEMPLATES.map((t) => (
+                      <button key={t.label} type="button" className="fc-template-chip" onClick={() => addTemplate(t)}>
                         + {t.label}
                       </button>
                     ))}
                   </div>
+
+                  {/* Saved templates panel (latest first — stored in reverse insert order) */}
+                  <SavedTemplatesPanel
+                    savedTemplates={savedTemplates}
+                    onUse={addTemplate}
+                    onDelete={handleDeleteTemplate}
+                  />
 
                   <div className="fc-q-list">
                     {form.questions.map((q, idx) => (
@@ -1092,27 +1068,22 @@ const FormCreator = () => {
                         <div className="fc-q-head">
                           <div className="fc-q-meta">
                             <span className="fc-q-num">{idx + 1}</span>
-                            <span style={{ fontSize: 15 }}>
-                              {QTYPE_ICONS[q.type] || "❓"}
-                            </span>
+                            <span style={{ fontSize: 15 }}>{QTYPE_ICONS[q.type] || "❓"}</span>
                             <span className="fc-q-type-label">{q.type}</span>
                           </div>
                           <div className="fc-q-controls">
+                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, -1)} disabled={idx === 0}>↑</button>
+                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, 1)} disabled={idx === form.questions.length - 1}>↓</button>
+                            {/* Save as template */}
                             <button
                               type="button"
                               className="fc-q-icon-btn"
-                              onClick={() => moveQuestion(idx, -1)}
-                              disabled={idx === 0}
+                              title="Save as template"
+                              onClick={() => handleSaveAsTemplate(idx)}
+                              disabled={!q.prompt.trim()}
+                              style={{ fontSize: 13 }}
                             >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              className="fc-q-icon-btn"
-                              onClick={() => moveQuestion(idx, 1)}
-                              disabled={idx === form.questions.length - 1}
-                            >
-                              ↓
+                              {savingTplIdx === idx ? "✓" : "📄"}
                             </button>
                             <button
                               type="button"
@@ -1125,16 +1096,12 @@ const FormCreator = () => {
                         </div>
                         <div className="fc-q-body">
                           <div className="fc-q-prompt-wrap">
-                            <label className="fc-label">
-                              Question Prompt <span className="fc-req">*</span>
-                            </label>
+                            <label className="fc-label">Question Prompt <span className="fc-req">*</span></label>
                             <input
                               className="fc-input"
                               required
                               value={q.prompt}
-                              onChange={(e) =>
-                                updateQuestion(idx, "prompt", e.target.value)
-                              }
+                              onChange={(e) => updateQuestion(idx, "prompt", e.target.value)}
                               placeholder="Enter your question here…"
                             />
                           </div>
@@ -1143,56 +1110,35 @@ const FormCreator = () => {
                             <select
                               className="fc-input"
                               value={q.type}
-                              onChange={(e) =>
-                                updateQuestion(idx, "type", e.target.value)
-                              }
+                              onChange={(e) => updateQuestion(idx, "type", e.target.value)}
                             >
                               <option value="text">✍️ Text Answer</option>
                               <option value="rating">⭐ Star Rating</option>
-                              <option value="single-choice">
-                                🔘 Single Choice
-                              </option>
+                              <option value="single-choice">🔘 Single Choice</option>
                             </select>
                           </div>
                         </div>
-                        {(q.type === "single-choice" ||
-                          q.type === "multiple-choice") && (
+                        {(q.type === "single-choice" || q.type === "multiple-choice") && (
                           <div style={{ marginTop: 10 }}>
-                            <label className="fc-label">
-                              Options{" "}
-                              <span className="fc-hint">(comma-separated)</span>
-                            </label>
+                            <label className="fc-label">Options <span className="fc-hint">(comma-separated)</span></label>
                             <input
                               className="fc-input"
                               placeholder="Yes, No, Maybe, Not sure"
                               value={q.optionsText}
-                              onChange={(e) =>
-                                updateQuestion(
-                                  idx,
-                                  "optionsText",
-                                  e.target.value,
-                                )
-                              }
+                              onChange={(e) => updateQuestion(idx, "optionsText", e.target.value)}
                             />
                           </div>
                         )}
                         <div style={{ marginTop: 10 }}>
                           <label className="fc-label">
-                            Suggested Answer Templates{" "}
-                            <span className="fc-hint">(comma-separated)</span>
+                            Suggested Answer Templates <span className="fc-hint">(comma-separated)</span>
                           </label>
                           <textarea
                             className="fc-input fc-textarea"
                             style={{ height: 52 }}
                             placeholder="Great session!, The speaker was excellent…"
                             value={q.answerTemplatesText}
-                            onChange={(e) =>
-                              updateQuestion(
-                                idx,
-                                "answerTemplatesText",
-                                e.target.value,
-                              )
-                            }
+                            onChange={(e) => updateQuestion(idx, "answerTemplatesText", e.target.value)}
                           />
                         </div>
                         <div className="fc-q-required">
@@ -1200,20 +1146,10 @@ const FormCreator = () => {
                             type="checkbox"
                             id={`req-${idx}`}
                             checked={q.required}
-                            onChange={(e) =>
-                              updateQuestion(idx, "required", e.target.checked)
-                            }
-                            style={{
-                              width: 14,
-                              height: 14,
-                              accentColor: "#3b82f6",
-                            }}
+                            onChange={(e) => updateQuestion(idx, "required", e.target.checked)}
+                            style={{ width: 14, height: 14, accentColor: "#3b82f6" }}
                           />
-                          <label
-                            htmlFor={`req-${idx}`}
-                            className="fc-label"
-                            style={{ cursor: "pointer", margin: 0 }}
-                          >
+                          <label htmlFor={`req-${idx}`} className="fc-label" style={{ cursor: "pointer", margin: 0 }}>
                             Mandatory
                           </label>
                         </div>
@@ -1222,9 +1158,7 @@ const FormCreator = () => {
                     {form.questions.length === 0 && (
                       <div className="fc-empty-q">
                         <span style={{ fontSize: 36 }}>❓</span>
-                        <p>
-                          No questions yet. Add one or use a template above.
-                        </p>
+                        <p>No questions yet. Add one or use a template above.</p>
                       </div>
                     )}
                   </div>
@@ -1232,40 +1166,18 @@ const FormCreator = () => {
                   {status.type === "error" && (
                     <div className="fc-status fc-status--error">
                       <span>❌</span>
-                      <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>
-                        {status.message}
-                      </p>
+                      <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>{status.message}</p>
                     </div>
                   )}
 
                   <div className="fc-nav-row">
-                    <button
-                      type="button"
-                      className="fc-ghost-btn"
-                      onClick={() => setActiveSection("settings")}
-                    >
-                      ← Back
-                    </button>
-                    <button
-                      type="submit"
-                      className="fc-submit-btn"
-                      disabled={isSaving}
-                    >
+                    <button type="button" className="fc-ghost-btn" onClick={() => setActiveSection("settings")}>← Back</button>
+                    <button type="submit" className="fc-submit-btn" disabled={isSaving}>
                       {isSaving ? (
-                        <>
-                          <span className="fc-spinner" /> Publishing…
-                        </>
+                        <><span className="fc-spinner" /> Publishing…</>
                       ) : (
                         <>
-                          <svg
-                            width="13"
-                            height="13"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                          >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                             <polyline points="20 6 9 17 4 12" />
                           </svg>{" "}
                           Save &amp; Publish
@@ -1385,10 +1297,22 @@ const CSS = `
 /* Questions */
 .fc-q-list { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
 .fc-add-q-btn { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#2563eb; padding:8px 14px; border-radius:8px; font-size:11.5px; font-weight:700; border:1.5px solid #bfdbfe; cursor:pointer; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; }
-.fc-template-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:14px; padding:11px 13px; background:#f8fafc; border-radius:9px; border:1px solid #e8ecf0; }
+.fc-template-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px; padding:11px 13px; background:#f8fafc; border-radius:9px; border:1px solid #e8ecf0; }
 .fc-template-label { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; }
 .fc-template-chip { font-size:11px; font-weight:600; color:#475569; background:#fff; border:1.5px solid #e8ecf0; border-radius:99px; padding:5px 11px; cursor:pointer; transition:all 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-template-chip:hover { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; }
+
+/* Saved templates panel */
+.fc-saved-tpl-wrap { margin-bottom:14px; border:1.5px solid #e8ecf0; border-radius:10px; overflow:hidden; }
+.fc-saved-tpl-toggle { width:100%; display:flex; align-items:center; gap:8px; padding:10px 14px; background:#fafbfc; border:none; cursor:pointer; font-size:12px; font-weight:700; color:#475569; font-family:'DM Sans',system-ui,sans-serif; text-align:left; }
+.fc-saved-tpl-toggle:hover { background:#f1f5f9; }
+.fc-saved-tpl-list { display:flex; flex-direction:column; gap:0; border-top:1px solid #e8ecf0; }
+.fc-saved-tpl-row { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:10px 14px; border-bottom:1px solid #f1f5f9; }
+.fc-saved-tpl-row:last-child { border-bottom:none; }
+.fc-saved-tpl-info { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.fc-saved-tpl-prompt { font-size:12.5px; font-weight:600; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fc-saved-tpl-meta { font-size:10px; color:#94a3b8; font-weight:500; }
+
 .fc-q-card { background:#fafbfc; border:1.5px solid #e8ecf0; border-radius:11px; padding:14px 16px; transition:border-color 0.15s; }
 .fc-q-card:focus-within { border-color:#3b82f6; }
 .fc-q-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
@@ -1431,6 +1355,7 @@ const CSS = `
     .fc-pl-url { max-width:100%; }
     .fc-share-row { flex-direction:column; align-items:flex-start; }
     .fc-share-code { width:100%; }
+    .fc-saved-tpl-row { grid-template-columns:1fr auto auto; }
 }
 `;
 
