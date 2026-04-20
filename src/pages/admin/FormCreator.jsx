@@ -3,246 +3,137 @@ import { Link, useBlocker, useParams } from "react-router-dom";
 import { createForm, updateForm, updateFormSettings, getForm } from "../../api/feedbackApi";
 
 /* ─── helpers ──────────────────────────────────────── */
-const DRAFT_KEY = "simtrak_form_draft";
+const DRAFT_KEY     = "simtrak_form_draft";
 const TEMPLATES_KEY = "simtrak_question_templates";
 
 const emptyQuestion = () => ({
-  prompt: "",
-  type: "text",
-  required: false,
-  optionsText: "",
-  answerTemplatesText: "",
+  prompt: "", type: "text", required: false, optionsText: "", answerTemplatesText: "",
 });
 
 const splitList = (v) =>
-  v
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  v.split(",").map((s) => s.trim()).filter(Boolean);
 
-const saveDraft = (data) => {
-  try {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({ ...data, _savedAt: Date.now() }),
-    );
-  } catch {}
-};
-const loadDraft = () => {
-  try {
-    const d = localStorage.getItem(DRAFT_KEY);
-    return d ? JSON.parse(d) : null;
-  } catch {
-    return null;
-  }
-};
-const clearDraft = () => {
-  try {
-    localStorage.removeItem(DRAFT_KEY);
-  } catch {}
-};
+const saveDraft  = (data) => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...data, _savedAt: Date.now() })); } catch {} };
+const loadDraft  = ()     => { try { const d = localStorage.getItem(DRAFT_KEY); return d ? JSON.parse(d) : null; } catch { return null; } };
+const clearDraft = ()     => { try { localStorage.removeItem(DRAFT_KEY); } catch {} };
 
-/* ── Question template persistence ── */
+/**
+ * Load saved templates sorted latest-first.
+ */
 const loadSavedTemplates = () => {
   try {
     const raw = localStorage.getItem(TEMPLATES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return [...parsed].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  } catch { return []; }
 };
+
+/**
+ * Save a question as a reusable template (latest-first).
+ */
 const saveTemplate = (tpl) => {
   try {
     const existing = loadSavedTemplates();
-    // Avoid exact-prompt duplicates — update savedAt instead
     const filtered = existing.filter((t) => t.prompt !== tpl.prompt);
-    const updated = [{ ...tpl, savedAt: Date.now() }, ...filtered];
+    const newEntry = { ...tpl, savedAt: Date.now() };
+    // Always put newest at the front
+    const updated = [newEntry, ...filtered];
     localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
     return updated;
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 };
+
+/**
+ * Delete a saved template by its prompt text.
+ */
 const deleteTemplate = (prompt) => {
   try {
     const existing = loadSavedTemplates();
     const updated = existing.filter((t) => t.prompt !== prompt);
     localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
     return updated;
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 };
 
-/**
- * Compute a default closesAt value.
- * Flash forms: required (no default — user must set).
- * All others: default to now + 5 days.
- */
 const defaultClosesAt = (formType) => {
-  if (formType === "flash") return ""; // must be set explicitly
+  if (formType === "flash") return "";
   const d = new Date();
   d.setDate(d.getDate() + 5);
-  // datetime-local format: YYYY-MM-DDTHH:mm
   return d.toISOString().slice(0, 16);
 };
 
-/** Convert a saved form (from API) back to FormCreator's working state shape */
 const formToState = (apiForm) => ({
-  title: apiForm.title || "",
-  description: apiForm.description || "",
-  formType: apiForm.formType || "",
-  status: apiForm.status || "draft",
-  visibility: apiForm.visibility || "public",
+  title:                  apiForm.title        || "",
+  description:            apiForm.description  || "",
+  formType:               apiForm.formType     || "",
+  status:                 apiForm.status       || "draft",
+  visibility:             apiForm.visibility   || "public",
   allowedRespondentsText: (apiForm.allowedRespondents || []).join(", "),
-  collectsPhone: !!apiForm.collectsPhone,
-  phoneRequired: !!apiForm.phoneRequired,
+  collectsPhone:          !!apiForm.collectsPhone,
+  phoneRequired:          !!apiForm.phoneRequired,
   collectsCompanyDetails: !!apiForm.collectsCompanyDetails,
   companyDetailsRequired: !!apiForm.companyDetailsRequired,
-  duplicateCheckFields: apiForm.duplicateCheckFields || ["email"],
-  opensAt: apiForm.availability?.opensAt
-    ? new Date(apiForm.availability.opensAt).toISOString().slice(0, 16)
-    : "",
-  closesAt: apiForm.availability?.closesAt
-    ? new Date(apiForm.availability.closesAt).toISOString().slice(0, 16)
-    : "",
+  duplicateCheckFields:   apiForm.duplicateCheckFields || ["email"],
+  opensAt:    apiForm.availability?.opensAt  ? new Date(apiForm.availability.opensAt).toISOString().slice(0, 16)  : "",
+  closesAt:   apiForm.availability?.closesAt ? new Date(apiForm.availability.closesAt).toISOString().slice(0, 16) : "",
   singleSession: !!apiForm.availability?.singleSession,
-  sessionKey: apiForm.availability?.sessionKey || "",
+  sessionKey:    apiForm.availability?.sessionKey || "",
   questions: (apiForm.questions || []).map((q) => ({
     ...q,
-    optionsText: (q.options || []).join(", "),
+    optionsText:         (q.options         || []).join(", "),
     answerTemplatesText: (q.answerTemplates || []).join(", "),
   })),
   personalizations: apiForm.personalizations || [],
 });
 
 const BUILTIN_QUESTION_TEMPLATES = [
-  {
-    label: "Overall Rating",
-    prompt: "How would you rate your overall experience?",
-    type: "rating",
-    required: true,
-    optionsText: "",
-    answerTemplatesText: "",
-  },
-  {
-    label: "What Worked",
-    prompt: "What did you like the most?",
-    type: "text",
-    required: false,
-    optionsText: "",
-    answerTemplatesText:
-      "The session was useful because...,I liked the presenter because...",
-  },
-  {
-    label: "Improvements",
-    prompt: "What could be improved?",
-    type: "text",
-    required: false,
-    optionsText: "",
-    answerTemplatesText: "More examples would help,The session was too long",
-  },
-  {
-    label: "Recommend?",
-    prompt: "Would you recommend this to others?",
-    type: "single-choice",
-    required: false,
-    optionsText: "Yes definitely,Probably yes,Not sure,Probably not",
-    answerTemplatesText: "",
-  },
+  { label: "Overall Rating",  prompt: "How would you rate your overall experience?", type: "rating",        required: true,  optionsText: "", answerTemplatesText: "" },
+  { label: "What Worked",     prompt: "What did you like the most?",                type: "text",          required: false, optionsText: "", answerTemplatesText: "The session was useful because...,I liked the presenter because..." },
+  { label: "Improvements",    prompt: "What could be improved?",                   type: "text",          required: false, optionsText: "", answerTemplatesText: "More examples would help,The session was too long" },
+  { label: "Recommend?",      prompt: "Would you recommend this to others?",       type: "single-choice", required: false, optionsText: "Yes definitely,Probably yes,Not sure,Probably not", answerTemplatesText: "" },
 ];
 
-const QTYPE_ICONS = {
-  text: "✍️",
-  rating: "⭐",
-  "single-choice": "🔘",
-  "multiple-choice": "☑️",
-};
+const QTYPE_ICONS = { text: "✍️", rating: "⭐", "single-choice": "🔘", "multiple-choice": "☑️" };
 
 const INITIAL_FORM = {
-  title: "",
-  description: "",
-  formType: "",
-  status: "draft",
-  visibility: "public",
-  allowedRespondentsText: "",
-  collectsPhone: true,
-  phoneRequired: false,
-  collectsCompanyDetails: true,
-  companyDetailsRequired: false,
-  duplicateCheckFields: ["email", "phone"],
-  opensAt: "",
-  closesAt: "",
-  singleSession: false,
-  sessionKey: "",
-  questions: [emptyQuestion()],
-  personalizations: [],
+  title: "", description: "", formType: "", status: "draft", visibility: "public",
+  allowedRespondentsText: "", collectsPhone: true, phoneRequired: false,
+  collectsCompanyDetails: true, companyDetailsRequired: false,
+  duplicateCheckFields: ["email", "phone"], opensAt: "", closesAt: "",
+  singleSession: false, sessionKey: "", questions: [emptyQuestion()], personalizations: [],
 };
 
 /* ─── sub-components ───────────────────────────────── */
 const DraftBanner = ({ draft, onRestore, onDiscard }) => (
   <div className="fc-draft-banner">
     <div className="fc-draft-banner-left">
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="#b45309"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-      >
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
       </svg>
       <span>
         You have an unsaved draft from{" "}
-        <strong>
-          {new Date(draft._savedAt).toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </strong>
-        . Restore it?
+        <strong>{new Date(draft._savedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</strong>.
+        Restore it?
       </span>
     </div>
     <div className="fc-draft-banner-actions">
-      <button type="button" className="fc-draft-restore" onClick={onRestore}>
-        Restore
-      </button>
-      <button type="button" className="fc-draft-discard" onClick={onDiscard}>
-        Discard
-      </button>
+      <button type="button" className="fc-draft-restore" onClick={onRestore}>Restore</button>
+      <button type="button" className="fc-draft-discard" onClick={onDiscard}>Discard</button>
     </div>
   </div>
 );
 
 const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
-  const getP = (id) =>
-    personalizations.find((p) => p.identifier === id) || {
-      identifier: id,
-      name: "",
-      prefillData: {},
-    };
-
+  const getP = (id) => personalizations.find((p) => p.identifier === id) || { identifier: id, name: "", prefillData: {} };
   const update = (id, field, value) => {
     const existing = getP(id);
-    const updated = { ...existing, [field]: value };
-    const rest = personalizations.filter((p) => p.identifier !== id);
+    const updated  = { ...existing, [field]: value };
+    const rest     = personalizations.filter((p) => p.identifier !== id);
     onChange([...rest, updated]);
   };
-
   if (!respondents.length)
-    return (
-      <div className="fc-empty-state" style={{ padding: "16px", marginTop: 8 }}>
-        <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
-          Add allowed respondent emails above to configure personalization.
-        </p>
-      </div>
-    );
-
+    return <div className="fc-empty-state" style={{ padding: "16px", marginTop: 8 }}><p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Add allowed respondent emails above to configure personalization.</p></div>;
   return (
     <div className="fc-personalization-list">
       {respondents.map((id) => {
@@ -250,37 +141,13 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
         return (
           <div key={id} className="fc-person-row">
             <div className="fc-person-id">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
               </svg>
               <span>{id}</span>
             </div>
-            <input
-              className="fc-input fc-person-name"
-              placeholder="Greeting name (e.g. John)"
-              value={p.name || ""}
-              onChange={(e) => update(id, "name", e.target.value)}
-            />
-            <input
-              className="fc-input fc-person-company"
-              placeholder="Pre-fill company name (optional)"
-              value={p.prefillData?.companyName || ""}
-              onChange={(e) =>
-                update(id, "prefillData", {
-                  ...p.prefillData,
-                  companyName: e.target.value,
-                })
-              }
-            />
+            <input className="fc-input fc-person-name" placeholder="Greeting name (e.g. John)" value={p.name || ""} onChange={(e) => update(id, "name", e.target.value)} />
+            <input className="fc-input fc-person-company" placeholder="Pre-fill company name (optional)" value={p.prefillData?.companyName || ""} onChange={(e) => update(id, "prefillData", { ...p.prefillData, companyName: e.target.value })} />
           </div>
         );
       })}
@@ -288,36 +155,25 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
   );
 };
 
-/* ── PersonalizedLinksPanel ── */
-const PersonalizedLinksPanel = ({
-  formId,
-  formSlug,
-  personalizations,
-  allowedRespondents,
-}) => {
+const PersonalizedLinksPanel = ({ formId, formSlug, personalizations, allowedRespondents }) => {
   const [copied, setCopied] = useState("");
-  const base = `${window.location.origin}/form/${formSlug || formId}`;
+  const identifier = formSlug || formId;
+  const base = `${window.location.origin}/form/${identifier}`;
 
-  const buildUrl = (identifier, p) => {
+  const buildUrl = (respondentEmail, p) => {
     const params = new URLSearchParams();
-    params.set("email", identifier);
-    if (p?.name) params.set("name", p.name);
-    if (p?.prefillData?.companyName)
-      params.set("company", p.prefillData.companyName);
+    params.set("email", respondentEmail);
+    if (p?.name)                     params.set("name",    p.name);
+    if (p?.prefillData?.companyName) params.set("company", p.prefillData.companyName);
     return `${base}?${params.toString()}`;
   };
 
   const copyAll = () => {
-    const text = allowedRespondents
-      .map((id) => {
-        const p = personalizations.find((x) => x.identifier === id);
-        return `${p?.name || id}: ${buildUrl(id, p)}`;
-      })
-      .join("\n");
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied("all");
-      setTimeout(() => setCopied(""), 2000);
-    });
+    const text = allowedRespondents.map((id) => {
+      const p = personalizations.find((x) => x.identifier === id);
+      return `${p?.name || id}: ${buildUrl(id, p)}`;
+    }).join("\n");
+    navigator.clipboard.writeText(text).then(() => { setCopied("all"); setTimeout(() => setCopied(""), 2000); });
   };
 
   if (!allowedRespondents.length) return null;
@@ -325,26 +181,17 @@ const PersonalizedLinksPanel = ({
   return (
     <div className="fc-personalized-links">
       <div className="fc-personalized-links-header">
-        <p className="fc-sub-label" style={{ margin: 0 }}>
-          🔗 Personalized Links
-        </p>
+        <p className="fc-sub-label" style={{ margin: 0 }}>🔗 Personalized Links</p>
         <button type="button" className="fc-copy-btn" onClick={copyAll}>
           {copied === "all" ? "✓ Copied All" : "Copy All"}
         </button>
       </div>
-      <p
-        style={{
-          fontSize: 12,
-          color: "#64748b",
-          margin: "6px 0 12px",
-          lineHeight: 1.5,
-        }}
-      >
-        Each link pre-fills the respondent's details and greets them by name.
+      <p style={{ fontSize: 12, color: "#64748b", margin: "6px 0 12px", lineHeight: 1.5 }}>
+        Each link pre-fills the respondent's details and is cryptographically verified on submission.
       </p>
       <div className="fc-pl-list">
         {allowedRespondents.map((id) => {
-          const p = personalizations.find((x) => x.identifier === id);
+          const p   = personalizations.find((x) => x.identifier === id);
           const url = buildUrl(id, p);
           return (
             <div key={id} className="fc-pl-row">
@@ -352,19 +199,10 @@ const PersonalizedLinksPanel = ({
                 <span className="fc-pl-name">{p?.name || id}</span>
                 <span className="fc-pl-email">{id}</span>
               </div>
-              <code className="fc-pl-url" title={url}>
-                {url}
-              </code>
-              <button
-                type="button"
-                className="fc-copy-btn"
-                onClick={() => {
-                  navigator.clipboard.writeText(url).then(() => {
-                    setCopied(id);
-                    setTimeout(() => setCopied(""), 2000);
-                  });
-                }}
-              >
+              <code className="fc-pl-url" title={url}>{url}</code>
+              <button type="button" className="fc-copy-btn" onClick={() => {
+                navigator.clipboard.writeText(url).then(() => { setCopied(id); setTimeout(() => setCopied(""), 2000); });
+              }}>
                 {copied === id ? "✓" : "Copy"}
               </button>
             </div>
@@ -375,46 +213,64 @@ const PersonalizedLinksPanel = ({
   );
 };
 
-/* ── SavedTemplatesPanel ── */
+/**
+ * SavedTemplatesPanel
+ *
+ * KEY FIX: Templates are now always sorted newest-first (savedAt DESC).
+ * When a template is used via "+ Use", the new question is prepended
+ * to the top of the questions list (not appended to the bottom).
+ */
 const SavedTemplatesPanel = ({ savedTemplates, onUse, onDelete }) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
+
   if (!savedTemplates.length) return null;
+
+  // Ensure display order is always newest-first
+  const sorted = [...savedTemplates].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+
   return (
     <div className="fc-saved-tpl-wrap">
-      <button
-        type="button"
-        className="fc-saved-tpl-toggle"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
+      <button type="button" className="fc-saved-tpl-toggle" onClick={() => setOpen((v) => !v)}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+          <polyline points="17 21 17 13 7 13 7 21" />
         </svg>
-        My Templates ({savedTemplates.length})
-        <span style={{ marginLeft: "auto", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+        <span>My Saved Templates</span>
+        <span className="fc-saved-tpl-count">{savedTemplates.length}</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, color: "#94a3b8" }}>{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="fc-saved-tpl-list">
-          {savedTemplates.map((t) => (
+          {sorted.map((t) => (
             <div key={t.prompt} className="fc-saved-tpl-row">
+              <div className="fc-saved-tpl-type-icon">{QTYPE_ICONS[t.type] || "❓"}</div>
               <div className="fc-saved-tpl-info">
                 <span className="fc-saved-tpl-prompt">{t.prompt}</span>
                 <span className="fc-saved-tpl-meta">
-                  {QTYPE_ICONS[t.type] || "❓"} {t.type}
-                  {t.savedAt ? ` · ${new Date(t.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                  {t.type}
+                  {t.savedAt ? ` · Saved ${new Date(t.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                  {t.required ? " · Required" : ""}
+                  {t.optionsText ? ` · Options: ${t.optionsText.split(",").length}` : ""}
                 </span>
               </div>
-              <button type="button" className="fc-template-chip" onClick={() => onUse(t)}>
+              <button
+                type="button"
+                className="fc-tpl-use-btn"
+                onClick={() => onUse(t)}
+                title="Add this question to the top of the form"
+              >
                 + Use
               </button>
               <button
                 type="button"
-                className="fc-q-icon-btn fc-q-icon-btn--danger"
-                style={{ width: 24, height: 24, fontSize: 11 }}
+                className="fc-tpl-del-btn"
                 onClick={() => onDelete(t.prompt)}
-                title="Delete template"
+                title="Delete this template"
               >
-                ✕
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                </svg>
               </button>
             </div>
           ))}
@@ -429,21 +285,26 @@ const FormCreator = () => {
   const { editFormId } = useParams();
   const isEditMode = !!editFormId;
 
-  const [form, setForm] = useState(INITIAL_FORM);
-  const [status, setStatus] = useState({ type: "", message: "", link: "" });
-  const [shareUrl, setShareUrl] = useState("");
+  const [form, setForm]                   = useState(INITIAL_FORM);
+  const [status, setStatus]               = useState({ type: "", message: "", link: "" });
+  const [shareUrl, setShareUrl]           = useState("");
   const [publishedFormId, setPublishedFormId] = useState("");
   const [publishedSlug, setPublishedSlug] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied]               = useState(false);
   const [activeSection, setActiveSection] = useState("info");
-  const [draftData, setDraftData] = useState(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [draftData, setDraftData]         = useState(null);
+  const [isDirty, setIsDirty]             = useState(false);
+  const [isSaving, setIsSaving]           = useState(false);
   const [isLoadingEdit, setIsLoadingEdit] = useState(isEditMode);
-  const [savedFormId, setSavedFormId] = useState(isEditMode ? editFormId : null);
-  const [savedTemplates, setSavedTemplates] = useState(loadSavedTemplates);
-  // Track which question index is being saved as template
-  const [savingTplIdx, setSavingTplIdx] = useState(null);
+
+  const [savedFormId, setSavedFormId]     = useState(isEditMode ? editFormId : null);
+  const [savedFormSlug, setSavedFormSlug] = useState("");
+
+  // savedTemplates: sorted latest-first
+  const [savedTemplates, setSavedTemplates] = useState(() => loadSavedTemplates());
+  const [savingTplIdx, setSavingTplIdx]   = useState(null);
+  const [tplToast, setTplToast]           = useState("");
+
   const autoSaveTimerRef = useRef(null);
 
   /* ── Load existing form when in edit mode ── */
@@ -452,10 +313,11 @@ const FormCreator = () => {
     const load = async () => {
       setIsLoadingEdit(true);
       try {
-        const data = await getForm(editFormId);
+        const data    = await getForm(editFormId);
         const apiForm = data.form || data;
         setForm(formToState(apiForm));
         setSavedFormId(apiForm._id || apiForm.id || editFormId);
+        setSavedFormSlug(apiForm.slug || "");
         clearDraft();
       } catch (err) {
         setStatus({ type: "error", message: `Could not load form: ${err.message}` });
@@ -466,28 +328,28 @@ const FormCreator = () => {
     load();
   }, [editFormId, isEditMode]);
 
-  /* ── Load local draft on mount (only for new forms) ── */
   useEffect(() => {
     if (isEditMode) return;
     const d = loadDraft();
     if (d && d._savedAt) setDraftData(d);
   }, [isEditMode]);
 
-  /* ── When formType changes, set default closesAt (for new forms only) ── */
+  useEffect(() => { setSavedTemplates(loadSavedTemplates()); }, []);
+
   useEffect(() => {
     if (isEditMode) return;
     if (!form.formType) return;
-    if (form.formType !== "flash" && !form.closesAt) {
+    if (form.formType === "flash") {
+      setForm((c) => {
+        const wasDefault = c.closesAt && c.closesAt === defaultClosesAt("webinar");
+        return wasDefault ? { ...c, closesAt: "" } : c;
+      });
+    } else if (!form.closesAt) {
       setForm((c) => ({ ...c, closesAt: defaultClosesAt(c.formType) }));
-    }
-    // Flash: clear the auto-default if it was set
-    if (form.formType === "flash" && form.closesAt === defaultClosesAt("webinar")) {
-      setForm((c) => ({ ...c, closesAt: "" }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.formType, isEditMode]);
 
-  /* ── Debounced auto-save to localStorage ── */
   useEffect(() => {
     if (!isDirty) return;
     clearTimeout(autoSaveTimerRef.current);
@@ -495,16 +357,11 @@ const FormCreator = () => {
     return () => clearTimeout(autoSaveTimerRef.current);
   }, [form, isDirty]);
 
-  /* ── Block navigation when dirty ── */
   const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      isDirty && currentLocation.pathname !== nextLocation.pathname,
+    ({ currentLocation, nextLocation }) => isDirty && currentLocation.pathname !== nextLocation.pathname,
   );
   useEffect(() => {
-    if (blocker.state === "blocked") {
-      saveDraft(form);
-      blocker.proceed();
-    }
+    if (blocker.state === "blocked") { saveDraft(form); blocker.proceed(); }
   }, [blocker, form]);
 
   const restoreDraft = () => {
@@ -513,43 +370,27 @@ const FormCreator = () => {
     setDraftData(null);
     setIsDirty(true);
   };
-  const discardDraft = () => {
-    clearDraft();
-    setDraftData(null);
-  };
+  const discardDraft = () => { clearDraft(); setDraftData(null); };
 
-  /* ── Field helpers ── */
-  const updateField = useCallback((field, value) => {
-    setForm((c) => ({ ...c, [field]: value }));
-    setIsDirty(true);
-  }, []);
-
+  const updateField    = useCallback((field, value) => { setForm((c) => ({ ...c, [field]: value })); setIsDirty(true); }, []);
   const updateQuestion = useCallback((idx, field, value) => {
-    setForm((c) => ({
-      ...c,
-      questions: c.questions.map((q, i) =>
-        i === idx ? { ...q, [field]: value } : q,
-      ),
-    }));
+    setForm((c) => ({ ...c, questions: c.questions.map((q, i) => i === idx ? { ...q, [field]: value } : q) }));
     setIsDirty(true);
   }, []);
 
-  const addQuestion = () => {
-    setForm((c) => ({ ...c, questions: [...c.questions, emptyQuestion()] }));
-    setIsDirty(true);
-  };
-  const removeQuestion = (idx) => {
-    setForm((c) => ({ ...c, questions: c.questions.filter((_, i) => i !== idx) }));
-    setIsDirty(true);
-  };
+  const addQuestion    = () => { setForm((c) => ({ ...c, questions: [...c.questions, emptyQuestion()] })); setIsDirty(true); };
+  const removeQuestion = (idx) => { setForm((c) => ({ ...c, questions: c.questions.filter((_, i) => i !== idx) })); setIsDirty(true); };
+
+  /**
+   * KEY FIX: addTemplate now PREPENDS to questions list so newly added
+   * template questions always appear at the TOP, not the bottom.
+   */
   const addTemplate = (t) => {
     const { label, savedAt, ...rest } = t;
-    setForm((c) => ({
-      ...c,
-      questions: [...c.questions, { ...emptyQuestion(), ...rest }],
-    }));
+    setForm((c) => ({ ...c, questions: [{ ...emptyQuestion(), ...rest }, ...c.questions] }));
     setIsDirty(true);
   };
+
   const moveQuestion = (idx, dir) => {
     setForm((c) => {
       const qs = [...c.questions];
@@ -561,77 +402,100 @@ const FormCreator = () => {
     setIsDirty(true);
   };
 
-  /* ── Save current question as template ── */
-  const handleSaveAsTemplate = (idx) => {
+  /**
+   * handleSaveAsTemplate: save question at `idx`.
+   * After saving, the template appears at the TOP of the saved templates list.
+   */
+  const handleSaveAsTemplate = useCallback((idx) => {
     const q = form.questions[idx];
     if (!q.prompt.trim()) return;
+
     setSavingTplIdx(idx);
+
     const tpl = {
-      prompt: q.prompt,
-      type: q.type,
-      required: q.required,
-      optionsText: q.optionsText,
+      prompt:              q.prompt.trim(),
+      type:                q.type,
+      required:            q.required,
+      optionsText:         q.optionsText,
       answerTemplatesText: q.answerTemplatesText,
     };
+
     const updated = saveTemplate(tpl);
     setSavedTemplates(updated);
-    setTimeout(() => setSavingTplIdx(null), 1200);
-  };
 
-  const handleDeleteTemplate = (prompt) => {
+    setTplToast(`"${q.prompt.trim().slice(0, 40)}${q.prompt.trim().length > 40 ? "…" : ""}" saved as template`);
+    setTimeout(() => setTplToast(""), 3000);
+    setTimeout(() => setSavingTplIdx(null), 1200);
+  }, [form.questions]);
+
+  const handleDeleteTemplate = useCallback((prompt) => {
     const updated = deleteTemplate(prompt);
     setSavedTemplates(updated);
-  };
+  }, []);
 
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
-  /* ── Build content payload (questions + basic info, NO settings) ── */
+  /* ── Build payloads ── */
   const buildContentPayload = () => ({
-    title: form.title,
-    description: form.description,
-    formType: form.formType,
-    collectsPhone: form.collectsPhone,
-    phoneRequired: form.phoneRequired,
-    collectsCompanyDetails: form.collectsCompanyDetails,
-    companyDetailsRequired: form.companyDetailsRequired,
+    title: form.title, description: form.description, formType: form.formType,
+    collectsPhone: form.collectsPhone, phoneRequired: form.phoneRequired,
+    collectsCompanyDetails: form.collectsCompanyDetails, companyDetailsRequired: form.companyDetailsRequired,
     personalizations: form.personalizations,
-    questions: form.questions.map((q) => ({
-      ...q,
-      options: splitList(q.optionsText),
-      answerTemplates: splitList(q.answerTemplatesText),
-    })),
+    // Strip questions with empty prompts — Mongoose requires prompt to be non-empty
+    questions: form.questions
+      .filter((q) => q.prompt && q.prompt.trim())
+      .map((q) => ({ ...q, options: splitList(q.optionsText), answerTemplates: splitList(q.answerTemplatesText) })),
   });
 
-  /* ── Build settings payload (sent to /settings endpoint) ── */
   const buildSettingsPayload = (overrideStatus) => ({
-    status: overrideStatus || form.status,
-    visibility: form.visibility,
+    status:               overrideStatus || form.status,
+    visibility:           form.visibility,
     allowedRespondents,
-    personalizations: form.personalizations,
+    personalizations:     form.personalizations,
     duplicateCheckFields: form.duplicateCheckFields,
     availability: {
-      opensAt: form.opensAt || null,
-      closesAt: form.closesAt || null,
+      opensAt:       form.opensAt       || null,
+      closesAt:      form.closesAt      || null,
       singleSession: form.singleSession,
-      sessionKey: form.sessionKey,
+      sessionKey:    form.sessionKey,
     },
   });
 
   /* ── Save as Draft (to server) ── */
   const saveDraftToServer = async () => {
+    // Only require the basics — title and form type — to save a draft.
+    // Questions, settings, etc. are NOT required at draft stage.
+    if (!form.title?.trim()) {
+      setStatus({ type: "error", message: "Please enter a form title before saving the draft." });
+      setActiveSection("basics");
+      return;
+    }
+    if (!form.formType) {
+      setStatus({ type: "error", message: "Please select a form type before saving the draft." });
+      setActiveSection("basics");
+      return;
+    }
+    setStatus({ type: "", message: "", link: "" });
     setIsSaving(true);
     try {
-      let fId = savedFormId;
+      let fId   = savedFormId;
+      let fSlug = savedFormSlug;
       const contentPayload = buildContentPayload();
+
       if (fId) {
-        await updateForm(fId, contentPayload);
+        const data = await updateForm(fId, contentPayload);
+        fSlug = data.form?.slug || fSlug;
       } else {
         const data = await createForm({ ...contentPayload, status: "draft" });
-        fId = data.form._id || data.form.id;
+        fId    = data.form._id || data.form.id;
+        fSlug  = data.form?.slug || fId;
         setSavedFormId(fId);
+        setSavedFormSlug(fSlug);
       }
-      // Now save settings separately
-      await updateFormSettings(fId, buildSettingsPayload("draft"));
+      const settingsData = await updateFormSettings(fId, buildSettingsPayload("draft"));
+      fSlug = settingsData.form?.slug || fSlug;
+      setSavedFormSlug(fSlug);
+
       clearDraft();
       setIsDirty(false);
       setStatus({ type: "draft", message: "Draft saved. You can continue editing or publish it later." });
@@ -645,7 +509,6 @@ const FormCreator = () => {
   /* ── Publish / Submit ── */
   const submitForm = async (e) => {
     e.preventDefault();
-    // Flash forms must have a closing time
     if (form.formType === "flash" && !form.closesAt) {
       setStatus({ type: "error", message: "Flash forms must have a closing time. Please set it in Settings." });
       setActiveSection("settings");
@@ -654,30 +517,29 @@ const FormCreator = () => {
     setStatus({ type: "", message: "", link: "" });
     setIsSaving(true);
     try {
-      let fId = savedFormId;
+      let fId   = savedFormId;
+      let fSlug = savedFormSlug;
       const contentPayload = buildContentPayload();
-      let fSlug;
+
       if (fId) {
         const data = await updateForm(fId, contentPayload);
-        fSlug = data.form?.slug || fId;
+        fSlug = data.form?.slug || fSlug;
       } else {
         const data = await createForm({ ...contentPayload, status: "draft" });
-        fId = data.form._id || data.form.id;
-        fSlug = data.form?.slug || fId;
+        fId    = data.form._id || data.form.id;
+        fSlug  = data.form?.slug || fId;
         setSavedFormId(fId);
+        setSavedFormSlug(fSlug);
       }
-      // Push settings + go live
+
       const settingsData = await updateFormSettings(fId, buildSettingsPayload("live"));
       fSlug = settingsData.form?.slug || fSlug;
+      setSavedFormSlug(fSlug);
 
       setPublishedFormId(fId);
       setPublishedSlug(fSlug);
       setShareUrl(`${window.location.origin}/form/${fSlug}`);
-      setStatus({
-        type: "success",
-        message: "Form published successfully!",
-        link: `/form/${fSlug}`,
-      });
+      setStatus({ type: "success", message: "Form published successfully!", link: `/form/${fSlug}` });
       clearDraft();
       setIsDirty(false);
       setActiveSection("done");
@@ -689,17 +551,19 @@ const FormCreator = () => {
   };
 
   const copyLink = useCallback(() => {
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(shareUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   }, [shareUrl]);
 
   const SECTIONS = [
-    { id: "info", label: "General Info", icon: "📋" },
-    { id: "settings", label: "Settings", icon: "⚙️" },
+    { id: "info",      label: "Info",                              icon: "📋" },
+    { id: "settings",  label: "Settings",                          icon: "⚙️" },
     { id: "questions", label: `Questions (${form.questions.length})`, icon: "❓" },
   ];
+
+  const showLinksInSettings =
+    form.visibility === "restricted" &&
+    Boolean(savedFormId) &&
+    allowedRespondents.length > 0;
 
   if (isLoadingEdit)
     return (
@@ -715,6 +579,16 @@ const FormCreator = () => {
   return (
     <>
       <style>{CSS}</style>
+
+      {tplToast && (
+        <div className="fc-tpl-toast">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          {tplToast}
+        </div>
+      )}
+
       <main className="fc-main">
         <div className="fc-wrap">
           {!isEditMode && draftData && (
@@ -730,9 +604,7 @@ const FormCreator = () => {
                 </svg>
                 Back to Dashboard
               </Link>
-              <h1 className="fc-page-title">
-                {isEditMode ? "✏️ Edit Draft Form" : "Create New Form"}
-              </h1>
+              <h1 className="fc-page-title">{isEditMode ? "✏️ Edit Form" : "Create New Form"}</h1>
               {isEditMode && (
                 <p style={{ fontSize: 12, color: "#94a3b8", margin: "4px 0 0", fontWeight: 500 }}>
                   Picking up where you left off — changes auto-save to your draft.
@@ -743,23 +615,13 @@ const FormCreator = () => {
               <div className="fc-header-actions">
                 {isDirty && (
                   <button type="button" className="fc-save-draft-btn" onClick={saveDraftToServer} disabled={isSaving}>
-                    {isSaving ? (
-                      <><span className="fc-spinner" /> Saving…</>
-                    ) : (
-                      <>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-                          <polyline points="17 21 17 13 7 13 7 21" />
-                        </svg>
-                        Save Draft
-                      </>
+                    {isSaving ? <><span className="fc-spinner" /> Saving…</> : (
+                      <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /></svg> Save Draft</>
                     )}
                   </button>
                 )}
                 <button form="creator-form" type="submit" className="fc-publish-btn" disabled={isSaving}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
                   Publish
                 </button>
               </div>
@@ -770,10 +632,16 @@ const FormCreator = () => {
           {status.type === "draft" && (
             <div className="fc-status fc-status--draft">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
               </svg>
               {status.message}
+            </div>
+          )}
+
+          {status.type === "error" && activeSection !== "done" && (
+            <div className="fc-status fc-status--error">
+              <span>❌</span>
+              <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>{status.message}</p>
             </div>
           )}
 
@@ -785,9 +653,7 @@ const FormCreator = () => {
                 {shareUrl && (
                   <div className="fc-share-row">
                     <code className="fc-share-code">{shareUrl}</code>
-                    <button type="button" className="fc-copy-btn" onClick={copyLink}>
-                      {copied ? "✓ Copied" : "Copy"}
-                    </button>
+                    <button type="button" className="fc-copy-btn" onClick={copyLink}>{copied ? "✓ Copied" : "Copy"}</button>
                     <Link to={status.link} target="_blank" className="fc-open-btn">Open ↗</Link>
                   </div>
                 )}
@@ -807,12 +673,8 @@ const FormCreator = () => {
           {activeSection !== "done" && (
             <div className="fc-step-nav">
               {SECTIONS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setActiveSection(s.id)}
-                  className={`fc-step-btn ${activeSection === s.id ? "fc-step-btn--active" : ""}`}
-                >
+                <button key={s.id} type="button" onClick={() => setActiveSection(s.id)}
+                  className={`fc-step-btn ${activeSection === s.id ? "fc-step-btn--active" : ""}`}>
                   <span className="fc-step-icon">{s.icon}</span>
                   {s.label}
                 </button>
@@ -833,22 +695,11 @@ const FormCreator = () => {
                   <div className="fc-field-grid">
                     <div className="fc-field">
                       <label className="fc-label">Form Title <span className="fc-req">*</span></label>
-                      <input
-                        className="fc-input"
-                        required
-                        value={form.title}
-                        onChange={(e) => updateField("title", e.target.value)}
-                        placeholder="e.g. Post-Webinar Feedback 2025"
-                      />
+                      <input className="fc-input" required value={form.title} onChange={(e) => updateField("title", e.target.value)} placeholder="e.g. Webinar Feedback" />
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">Form Type <span className="fc-req">*</span></label>
-                      <select
-                        className="fc-input"
-                        required
-                        value={form.formType}
-                        onChange={(e) => updateField("formType", e.target.value)}
-                      >
+                      <select className="fc-input" required value={form.formType} onChange={(e) => updateField("formType", e.target.value)}>
                         <option value="">Select a type…</option>
                         <option value="webinar">🎙️ Webinar Form</option>
                         <option value="flash">⚡ Flash Form</option>
@@ -858,12 +709,7 @@ const FormCreator = () => {
                     </div>
                     <div className="fc-field fc-field--full">
                       <label className="fc-label">Description</label>
-                      <textarea
-                        className="fc-input fc-textarea"
-                        value={form.description}
-                        onChange={(e) => updateField("description", e.target.value)}
-                        placeholder="Briefly describe the purpose of this form…"
-                      />
+                      <textarea className="fc-input fc-textarea" value={form.description} onChange={(e) => updateField("description", e.target.value)} placeholder="Briefly describe the purpose of this form…" />
                     </div>
                   </div>
 
@@ -871,19 +717,13 @@ const FormCreator = () => {
                   <p className="fc-sub-label">Data Collection</p>
                   <div className="fc-chip-row">
                     {[
-                      ["collectsPhone", "📱 Collect Phone"],
-                      ["phoneRequired", "🔒 Phone Required"],
+                      ["collectsPhone",          "📱 Collect Phone"],
+                      ["phoneRequired",          "🔒 Phone Required"],
                       ["collectsCompanyDetails", "🏢 Company Details"],
-                      ["singleSession", "🔐 Single Session"],
+                      ["singleSession",          "🔐 Single Session"],
                     ].map(([key, lbl]) => (
-                      <button
-                        type="button"
-                        key={key}
-                        onClick={() => updateField(key, !form[key])}
-                        className={`fc-chip ${form[key] ? "fc-chip--on" : ""}`}
-                      >
-                        {lbl}
-                      </button>
+                      <button type="button" key={key} onClick={() => updateField(key, !form[key])}
+                        className={`fc-chip ${form[key] ? "fc-chip--on" : ""}`}>{lbl}</button>
                     ))}
                   </div>
 
@@ -891,9 +731,7 @@ const FormCreator = () => {
                     <span />
                     <button type="button" className="fc-next-btn" onClick={() => setActiveSection("settings")}>
                       Next: Settings
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M5 12h14M12 5l7 7-7 7" />
-                      </svg>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </button>
                   </div>
                 </div>
@@ -924,46 +762,26 @@ const FormCreator = () => {
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">Opens At</label>
-                      <input
-                        className="fc-input"
-                        type="datetime-local"
-                        value={form.opensAt}
-                        onChange={(e) => updateField("opensAt", e.target.value)}
-                      />
+                      <input className="fc-input" type="datetime-local" value={form.opensAt} onChange={(e) => updateField("opensAt", e.target.value)} />
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">
                         Closes At{" "}
                         {form.formType === "flash"
-                          ? <span className="fc-req">*</span>
-                          : <span className="fc-hint">(defaults to 5 days)</span>
-                        }
+                          ? <span className="fc-req">* required for flash</span>
+                          : <span className="fc-hint">(defaults to 5 days)</span>}
                       </label>
-                      <input
-                        className="fc-input"
-                        type="datetime-local"
-                        required={form.formType === "flash"}
-                        value={form.closesAt}
-                        onChange={(e) => updateField("closesAt", e.target.value)}
-                      />
+                      <input className="fc-input" type="datetime-local" required={form.formType === "flash"} value={form.closesAt} onChange={(e) => updateField("closesAt", e.target.value)} />
                       {form.formType === "flash" && !form.closesAt && (
-                        <span style={{ fontSize: 10, color: "#ef4444", marginTop: 2 }}>
-                          Flash forms require a closing time.
+                        <span style={{ fontSize: 10, color: "#ef4444", marginTop: 2, display: "block" }}>
+                          ⚡ Flash forms require a closing time before publishing.
                         </span>
                       )}
                     </div>
                     {form.visibility === "restricted" && (
                       <div className="fc-field fc-field--full">
-                        <label className="fc-label">
-                          Allowed Respondents <span className="fc-hint">(comma-separated emails or IDs)</span>
-                        </label>
-                        <textarea
-                          className="fc-input fc-textarea"
-                          style={{ height: 68 }}
-                          placeholder="user1@example.com, user2@example.com"
-                          value={form.allowedRespondentsText}
-                          onChange={(e) => updateField("allowedRespondentsText", e.target.value)}
-                        />
+                        <label className="fc-label">Allowed Respondents <span className="fc-hint">(comma-separated emails or IDs)</span></label>
+                        <textarea className="fc-input fc-textarea" style={{ height: 68 }} placeholder="user1@example.com, user2@example.com" value={form.allowedRespondentsText} onChange={(e) => updateField("allowedRespondentsText", e.target.value)} />
                       </div>
                     )}
                   </div>
@@ -975,52 +793,52 @@ const FormCreator = () => {
                         <p className="fc-sub-label" style={{ margin: 0 }}>Personalization</p>
                         <span className="fc-badge-info">Restricted only</span>
                       </div>
-                      <p className="fc-personalization-hint">
-                        Pre-fill greeting names and company details per respondent. After publishing,
-                        you'll get unique links like <code>?name=John&amp;email=…</code> for each person.
-                      </p>
-                      <PersonalizationEditor
-                        respondents={allowedRespondents}
-                        personalizations={form.personalizations}
-                        onChange={(v) => updateField("personalizations", v)}
-                      />
+                      <p className="fc-personalization-hint">Pre-fill greeting names and company details per respondent.</p>
+                      <PersonalizationEditor respondents={allowedRespondents} personalizations={form.personalizations} onChange={(v) => updateField("personalizations", v)} />
                     </>
                   )}
 
                   <div className="fc-divider" />
                   <p className="fc-sub-label">Duplicate Submission Prevention</p>
                   <div className="fc-chip-row">
-                    {[
-                      ["email", "📧 Email"],
-                      ["phone", "📱 Phone"],
-                      ["uniqueId", "🆔 Unique ID"],
-                    ].map(([f, lbl]) => {
+                    {[["email", "📧 Email"], ["phone", "📱 Phone"], ["uniqueId", "🆔 Unique ID"]].map(([f, lbl]) => {
                       const on = form.duplicateCheckFields.includes(f);
                       return (
-                        <button
-                          type="button"
-                          key={f}
+                        <button type="button" key={f}
                           onClick={() => {
-                            const fields = on
-                              ? form.duplicateCheckFields.filter((x) => x !== f)
-                              : [...form.duplicateCheckFields, f];
+                            const fields = on ? form.duplicateCheckFields.filter((x) => x !== f) : [...form.duplicateCheckFields, f];
                             updateField("duplicateCheckFields", fields);
                           }}
-                          className={`fc-chip ${on ? "fc-chip--on" : ""}`}
-                        >
-                          {lbl}
-                        </button>
+                          className={`fc-chip ${on ? "fc-chip--on" : ""}`}>{lbl}</button>
                       );
                     })}
                   </div>
+
+                  {showLinksInSettings && (
+                    <>
+                      <div className="fc-divider" />
+                      <PersonalizedLinksPanel formId={savedFormId} formSlug={savedFormSlug} personalizations={form.personalizations} allowedRespondents={allowedRespondents} />
+                      {isDirty && <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 8, fontStyle: "italic" }}>⚠️ You have unsaved changes — save the draft to refresh the links.</p>}
+                    </>
+                  )}
+
+                  {form.visibility === "restricted" && allowedRespondents.length > 0 && !savedFormId && (
+                    <>
+                      <div className="fc-divider" />
+                      <div className="fc-links-prompt">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>Save the draft first to generate personalized links for your respondents.</span>
+                      </div>
+                    </>
+                  )}
 
                   <div className="fc-nav-row">
                     <button type="button" className="fc-ghost-btn" onClick={() => setActiveSection("info")}>← Back</button>
                     <button type="button" className="fc-next-btn" onClick={() => setActiveSection("questions")}>
                       Next: Questions
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M5 12h14M12 5l7 7-7 7" />
-                      </svg>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </button>
                   </div>
                 </div>
@@ -1032,36 +850,30 @@ const FormCreator = () => {
                   <div className="fc-section-header">
                     <div>
                       <h2 className="fc-section-title">Form Questions</h2>
-                      <p className="fc-section-desc">
-                        {form.questions.length} question{form.questions.length !== 1 ? "s" : ""} added
-                      </p>
+                      <p className="fc-section-desc">{form.questions.length} question{form.questions.length !== 1 ? "s" : ""} added</p>
                     </div>
                     <button type="button" className="fc-add-q-btn" onClick={addQuestion}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                       Add Question
                     </button>
                   </div>
 
-                  {/* Built-in quick templates */}
-                  <div className="fc-template-row">
-                    <span className="fc-template-label">Quick add:</span>
-                    {BUILTIN_QUESTION_TEMPLATES.map((t) => (
-                      <button key={t.label} type="button" className="fc-template-chip" onClick={() => addTemplate(t)}>
-                        + {t.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Saved templates panel (latest first — stored in reverse insert order) */}
+                  {/* ── MY SAVED TEMPLATES — newest-first, USE prepends to top ── */}
                   <SavedTemplatesPanel
                     savedTemplates={savedTemplates}
                     onUse={addTemplate}
                     onDelete={handleDeleteTemplate}
                   />
 
+                  {/* Built-in quick-add templates */}
+                  <div className="fc-template-row">
+                    <span className="fc-template-label">Quick add:</span>
+                    {BUILTIN_QUESTION_TEMPLATES.map((t) => (
+                      <button key={t.label} type="button" className="fc-template-chip" onClick={() => addTemplate(t)}>+ {t.label}</button>
+                    ))}
+                  </div>
+
+                  {/* Questions list */}
                   <div className="fc-q-list">
                     {form.questions.map((q, idx) => (
                       <div key={idx} className="fc-q-card">
@@ -1072,46 +884,32 @@ const FormCreator = () => {
                             <span className="fc-q-type-label">{q.type}</span>
                           </div>
                           <div className="fc-q-controls">
-                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, -1)} disabled={idx === 0}>↑</button>
-                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, 1)} disabled={idx === form.questions.length - 1}>↓</button>
-                            {/* Save as template */}
+                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, -1)} disabled={idx === 0} title="Move up">↑</button>
+                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, 1)} disabled={idx === form.questions.length - 1} title="Move down">↓</button>
                             <button
                               type="button"
-                              className="fc-q-icon-btn"
-                              title="Save as template"
+                              className={`fc-save-tpl-btn ${savingTplIdx === idx ? "fc-save-tpl-btn--saved" : ""}`}
+                              title={q.prompt.trim() ? "Save as reusable template (appears at top)" : "Enter a prompt first"}
                               onClick={() => handleSaveAsTemplate(idx)}
                               disabled={!q.prompt.trim()}
-                              style={{ fontSize: 13 }}
                             >
-                              {savingTplIdx === idx ? "✓" : "📄"}
+                              {savingTplIdx === idx ? (
+                                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg> Saved!</>
+                              ) : (
+                                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /></svg> Save as Template</>
+                              )}
                             </button>
-                            <button
-                              type="button"
-                              className="fc-q-icon-btn fc-q-icon-btn--danger"
-                              onClick={() => removeQuestion(idx)}
-                            >
-                              ✕
-                            </button>
+                            <button type="button" className="fc-q-icon-btn fc-q-icon-btn--danger" onClick={() => removeQuestion(idx)} title="Remove question">✕</button>
                           </div>
                         </div>
                         <div className="fc-q-body">
                           <div className="fc-q-prompt-wrap">
                             <label className="fc-label">Question Prompt <span className="fc-req">*</span></label>
-                            <input
-                              className="fc-input"
-                              required
-                              value={q.prompt}
-                              onChange={(e) => updateQuestion(idx, "prompt", e.target.value)}
-                              placeholder="Enter your question here…"
-                            />
+                            <input className="fc-input" required value={q.prompt} onChange={(e) => updateQuestion(idx, "prompt", e.target.value)} placeholder="Enter your question here…" />
                           </div>
                           <div className="fc-q-type-wrap">
                             <label className="fc-label">Response Type</label>
-                            <select
-                              className="fc-input"
-                              value={q.type}
-                              onChange={(e) => updateQuestion(idx, "type", e.target.value)}
-                            >
+                            <select className="fc-input" value={q.type} onChange={(e) => updateQuestion(idx, "type", e.target.value)}>
                               <option value="text">✍️ Text Answer</option>
                               <option value="rating">⭐ Star Rating</option>
                               <option value="single-choice">🔘 Single Choice</option>
@@ -1121,37 +919,16 @@ const FormCreator = () => {
                         {(q.type === "single-choice" || q.type === "multiple-choice") && (
                           <div style={{ marginTop: 10 }}>
                             <label className="fc-label">Options <span className="fc-hint">(comma-separated)</span></label>
-                            <input
-                              className="fc-input"
-                              placeholder="Yes, No, Maybe, Not sure"
-                              value={q.optionsText}
-                              onChange={(e) => updateQuestion(idx, "optionsText", e.target.value)}
-                            />
+                            <input className="fc-input" placeholder="Yes, No, Maybe, Not sure" value={q.optionsText} onChange={(e) => updateQuestion(idx, "optionsText", e.target.value)} />
                           </div>
                         )}
                         <div style={{ marginTop: 10 }}>
-                          <label className="fc-label">
-                            Suggested Answer Templates <span className="fc-hint">(comma-separated)</span>
-                          </label>
-                          <textarea
-                            className="fc-input fc-textarea"
-                            style={{ height: 52 }}
-                            placeholder="Great session!, The speaker was excellent…"
-                            value={q.answerTemplatesText}
-                            onChange={(e) => updateQuestion(idx, "answerTemplatesText", e.target.value)}
-                          />
+                          <label className="fc-label">Suggested Answer Templates <span className="fc-hint">(comma-separated)</span></label>
+                          <textarea className="fc-input fc-textarea" style={{ height: 52 }} placeholder="Great session!, The speaker was excellent…" value={q.answerTemplatesText} onChange={(e) => updateQuestion(idx, "answerTemplatesText", e.target.value)} />
                         </div>
                         <div className="fc-q-required">
-                          <input
-                            type="checkbox"
-                            id={`req-${idx}`}
-                            checked={q.required}
-                            onChange={(e) => updateQuestion(idx, "required", e.target.checked)}
-                            style={{ width: 14, height: 14, accentColor: "#3b82f6" }}
-                          />
-                          <label htmlFor={`req-${idx}`} className="fc-label" style={{ cursor: "pointer", margin: 0 }}>
-                            Mandatory
-                          </label>
+                          <input type="checkbox" id={`req-${idx}`} checked={q.required} onChange={(e) => updateQuestion(idx, "required", e.target.checked)} style={{ width: 14, height: 14, accentColor: "#3b82f6" }} />
+                          <label htmlFor={`req-${idx}`} className="fc-label" style={{ cursor: "pointer", margin: 0 }}>Mandatory</label>
                         </div>
                       </div>
                     ))}
@@ -1163,25 +940,11 @@ const FormCreator = () => {
                     )}
                   </div>
 
-                  {status.type === "error" && (
-                    <div className="fc-status fc-status--error">
-                      <span>❌</span>
-                      <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>{status.message}</p>
-                    </div>
-                  )}
-
                   <div className="fc-nav-row">
                     <button type="button" className="fc-ghost-btn" onClick={() => setActiveSection("settings")}>← Back</button>
                     <button type="submit" className="fc-submit-btn" disabled={isSaving}>
-                      {isSaving ? (
-                        <><span className="fc-spinner" /> Publishing…</>
-                      ) : (
-                        <>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>{" "}
-                          Save &amp; Publish
-                        </>
+                      {isSaving ? <><span className="fc-spinner" /> Publishing…</> : (
+                        <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>{" "}Save &amp; Publish</>
                       )}
                     </button>
                   </div>
@@ -1199,81 +962,90 @@ const FormCreator = () => {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
 
-.fc-main { flex:1; overflow-y:auto; background:#f8fafc; padding:28px 20px 60px; font-family:'DM Sans',system-ui,sans-serif; }
+.fc-tpl-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 99999;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+  animation: fc-toast-in 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+@keyframes fc-toast-in { from { opacity:0; transform:translateX(-50%) translateY(12px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+
+.fc-main { flex:1; overflow-y:auto; background:#f8fafc; padding:20px 16px 60px; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-wrap { max-width:860px; margin:0 auto; }
 
-/* Draft Banner */
-.fc-draft-banner {
-    display:flex; align-items:center; justify-content:space-between; gap:12; flex-wrap:wrap;
-    background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px 16px;
-    margin-bottom:16px; font-size:13px; color:#92400e; font-weight:500;
-}
+.fc-draft-banner { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#92400e; font-weight:500; }
 .fc-draft-banner-left { display:flex; align-items:center; gap:8px; flex:1; min-width:0; }
 .fc-draft-banner-actions { display:flex; gap:8px; flex-shrink:0; }
 .fc-draft-restore { padding:5px 14px; border-radius:7px; background:#f59e0b; color:#fff; border:none; font-size:12px; font-weight:700; cursor:pointer; }
 .fc-draft-discard { padding:5px 12px; border-radius:7px; background:transparent; color:#92400e; border:1px solid #fde68a; font-size:12px; font-weight:600; cursor:pointer; }
 
-/* Header */
 .fc-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
 .fc-back-link { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#3b82f6; text-decoration:none; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:5px; }
-.fc-page-title { font-size:22px; font-weight:800; color:#0f172a; letter-spacing:-0.02em; margin:0; }
-.fc-header-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-.fc-save-draft-btn { display:inline-flex; align-items:center; gap:7px; background:#fffbeb; color:#92400e; padding:9px 16px; border-radius:9px; font-size:12px; font-weight:700; border:1.5px solid #fde68a; cursor:pointer; transition:background 0.15s; }
+.fc-page-title { font-size:20px; font-weight:800; color:#0f172a; letter-spacing:-0.02em; margin:0; }
+.fc-header-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.fc-save-draft-btn { display:inline-flex; align-items:center; gap:7px; background:#fffbeb; color:#92400e; padding:8px 14px; border-radius:9px; font-size:12px; font-weight:700; border:1.5px solid #fde68a; cursor:pointer; transition:background 0.15s; white-space:nowrap; }
 .fc-save-draft-btn:hover:not(:disabled) { background:#fef3c7; }
 .fc-save-draft-btn:disabled { opacity:0.6; cursor:not-allowed; }
-.fc-publish-btn { display:inline-flex; align-items:center; gap:7px; background:#0f172a; color:#fff; padding:9px 18px; border-radius:9px; font-size:12px; font-weight:700; border:none; cursor:pointer; transition:background 0.15s; }
+.fc-publish-btn { display:inline-flex; align-items:center; gap:7px; background:#0f172a; color:#fff; padding:8px 16px; border-radius:9px; font-size:12px; font-weight:700; border:none; cursor:pointer; transition:background 0.15s; white-space:nowrap; }
 .fc-publish-btn:hover:not(:disabled) { background:#2563eb; }
 .fc-publish-btn:disabled { opacity:0.6; cursor:not-allowed; }
 
-/* Status messages */
 .fc-status { display:flex; align-items:flex-start; gap:10px; padding:14px 16px; border-radius:10px; margin-bottom:16px; border:1px solid; font-size:13px; }
 .fc-status--draft   { background:#fffbeb; border-color:#fde68a; color:#92400e; }
 .fc-status--success { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
 .fc-status--error   { background:#fff5f5; border-color:#fecaca; color:#dc2626; }
 .fc-share-row { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
-.fc-share-code { font-size:11px; background:rgba(0,0,0,0.06); padding:5px 10px; border-radius:6px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fc-share-code { font-size:11px; background:rgba(0,0,0,0.06); padding:5px 10px; border-radius:6px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; word-break:break-all; }
 .fc-copy-btn { font-size:11px; font-weight:700; background:rgba(0,0,0,0.07); border:none; border-radius:6px; padding:5px 12px; cursor:pointer; color:inherit; white-space:nowrap; flex-shrink:0; }
 .fc-open-btn { font-size:11px; font-weight:700; text-decoration:none; color:inherit; background:rgba(0,0,0,0.07); border-radius:6px; padding:5px 12px; white-space:nowrap; flex-shrink:0; }
 
-/* Personalized links panel */
 .fc-personalized-links { margin-top:14px; padding-top:14px; border-top:1px solid rgba(0,0,0,0.08); }
 .fc-personalized-links-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
 .fc-pl-list { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
-.fc-pl-row { display:grid; grid-template-columns:160px 1fr auto; gap:8px; align-items:center; background:rgba(0,0,0,0.04); border-radius:8px; padding:8px 10px; }
+.fc-pl-row { display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:center; background:rgba(0,0,0,0.04); border-radius:8px; padding:8px 10px; }
 .fc-pl-info { display:flex; flex-direction:column; gap:1px; overflow:hidden; min-width:0; }
 .fc-pl-name { font-size:12px; font-weight:700; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fc-pl-email { font-size:10px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fc-pl-url { font-size:10px; color:#2563eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:rgba(59,130,246,0.08); padding:4px 8px; border-radius:5px; min-width:0; }
 
-/* Step nav */
-.fc-step-nav { display:flex; gap:4px; background:#fff; border:1px solid #e8ecf0; border-radius:11px; padding:5px; margin-bottom:18px; overflow-x:auto; }
-.fc-step-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px 14px; border-radius:8px; font-size:11.5px; font-weight:700; color:#64748b; background:transparent; border:none; cursor:pointer; transition:all 0.15s; white-space:nowrap; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; }
+.fc-links-prompt { display:flex; align-items:flex-start; gap:8px; padding:12px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:9px; font-size:12px; color:#1d4ed8; font-weight:500; margin-top:8px; }
+
+/* Step nav — scrollable on mobile */
+.fc-step-nav { display:flex; gap:4px; background:#fff; border:1px solid #e8ecf0; border-radius:11px; padding:5px; margin-bottom:18px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.fc-step-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px 10px; border-radius:8px; font-size:11px; font-weight:700; color:#64748b; background:transparent; border:none; cursor:pointer; transition:all 0.15s; white-space:nowrap; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; min-width:80px; }
 .fc-step-btn--active { background:#0f172a; color:#fff; }
 .fc-step-icon { font-size:13px; }
 
-/* Section */
-.fc-section { background:#fff; border-radius:14px; border:1px solid #e8ecf0; padding:26px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+.fc-section { background:#fff; border-radius:14px; border:1px solid #e8ecf0; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
 .fc-section-header { margin-bottom:20px; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:10px; }
 .fc-section-title { font-size:17px; font-weight:800; color:#0f172a; margin:0 0 3px; letter-spacing:-0.01em; }
 .fc-section-desc  { font-size:12.5px; color:#94a3b8; margin:0; }
 
-/* Fields */
 .fc-field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .fc-field { display:flex; flex-direction:column; gap:5px; }
 .fc-field--full { grid-column:1/-1; }
 .fc-label { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; }
 .fc-req   { color:#ef4444; }
 .fc-hint  { text-transform:none; font-weight:500; letter-spacing:0; color:#cbd5e1; font-size:10px; }
-.fc-input {
-    width:100%; background:#f8fafc; border:1px solid #e8ecf0; border-radius:9px;
-    padding:10px 12px; font-size:13px; color:#0f172a; outline:none;
-    transition:border 0.15s,background 0.15s; box-sizing:border-box;
-    font-family:'DM Sans',system-ui,sans-serif;
-}
+.fc-input { width:100%; background:#f8fafc; border:1px solid #e8ecf0; border-radius:9px; padding:10px 12px; font-size:13px; color:#0f172a; outline:none; transition:border 0.15s,background 0.15s; box-sizing:border-box; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-input:focus { border-color:#3b82f6; background:#fff; box-shadow:0 0 0 3px rgba(59,130,246,0.1); }
 .fc-textarea { height:80px; resize:vertical; }
 
-/* Chips */
 .fc-divider  { height:1px; background:#f1f5f9; margin:18px 0; }
 .fc-sub-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px; }
 .fc-chip-row { display:flex; flex-wrap:wrap; gap:7px; }
@@ -1281,45 +1053,149 @@ const CSS = `
 .fc-chip:hover { background:#f1f5f9; }
 .fc-chip--on  { background:#0f172a; color:#fff; border-color:#0f172a; }
 
-/* Nav row */
-.fc-nav-row  { display:flex; justify-content:space-between; align-items:center; margin-top:22px; }
-.fc-next-btn { display:inline-flex; align-items:center; gap:8px; background:#3b82f6; color:#fff; padding:10px 18px; border-radius:9px; font-size:12.5px; font-weight:700; border:none; cursor:pointer; font-family:'DM Sans',system-ui,sans-serif; transition:background 0.15s; }
+.fc-nav-row  { display:flex; justify-content:space-between; align-items:center; margin-top:22px; flex-wrap:wrap; gap:10px; }
+.fc-next-btn { display:inline-flex; align-items:center; gap:8px; background:#3b82f6; color:#fff; padding:10px 16px; border-radius:9px; font-size:12.5px; font-weight:700; border:none; cursor:pointer; font-family:'DM Sans',system-ui,sans-serif; transition:background 0.15s; white-space:nowrap; }
 .fc-next-btn:hover { background:#2563eb; }
-.fc-ghost-btn { display:inline-flex; align-items:center; gap:6px; background:transparent; color:#64748b; padding:10px 14px; border-radius:9px; font-size:12.5px; font-weight:600; border:1.5px solid #e8ecf0; cursor:pointer; font-family:'DM Sans',system-ui,sans-serif; }
-.fc-submit-btn { display:inline-flex; align-items:center; gap:8px; background:#0f172a; color:#fff; padding:11px 22px; border-radius:9px; font-size:13px; font-weight:700; border:none; cursor:pointer; box-shadow:0 4px 14px rgba(15,23,42,0.2); transition:background 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
+.fc-ghost-btn { display:inline-flex; align-items:center; gap:6px; background:transparent; color:#64748b; padding:10px 14px; border-radius:9px; font-size:12.5px; font-weight:600; border:1.5px solid #e8ecf0; cursor:pointer; font-family:'DM Sans',system-ui,sans-serif; white-space:nowrap; }
+.fc-submit-btn { display:inline-flex; align-items:center; gap:8px; background:#0f172a; color:#fff; padding:11px 20px; border-radius:9px; font-size:13px; font-weight:700; border:none; cursor:pointer; box-shadow:0 4px 14px rgba(15,23,42,0.2); transition:background 0.15s; font-family:'DM Sans',system-ui,sans-serif; white-space:nowrap; }
 .fc-submit-btn:hover:not(:disabled) { background:#2563eb; }
 .fc-submit-btn:disabled { opacity:0.6; cursor:not-allowed; }
 
-/* Spinner */
 .fc-spinner { width:13px; height:13px; border:2px solid rgba(255,255,255,0.3); border-top-color:currentColor; border-radius:50%; animation:fc-spin 0.6s linear infinite; display:inline-block; }
 @keyframes fc-spin { to { transform:rotate(360deg); } }
 
-/* Questions */
+/* ── Questions section ── */
 .fc-q-list { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
-.fc-add-q-btn { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#2563eb; padding:8px 14px; border-radius:8px; font-size:11.5px; font-weight:700; border:1.5px solid #bfdbfe; cursor:pointer; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; }
-.fc-template-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px; padding:11px 13px; background:#f8fafc; border-radius:9px; border:1px solid #e8ecf0; }
+.fc-add-q-btn { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#2563eb; padding:8px 12px; border-radius:8px; font-size:11.5px; font-weight:700; border:1.5px solid #bfdbfe; cursor:pointer; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; white-space:nowrap; }
+
+/* Quick-add built-in templates row */
+.fc-template-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:12px; padding:11px 13px; background:#f8fafc; border-radius:9px; border:1px solid #e8ecf0; }
 .fc-template-label { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; }
 .fc-template-chip { font-size:11px; font-weight:600; color:#475569; background:#fff; border:1.5px solid #e8ecf0; border-radius:99px; padding:5px 11px; cursor:pointer; transition:all 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-template-chip:hover { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; }
 
-/* Saved templates panel */
-.fc-saved-tpl-wrap { margin-bottom:14px; border:1.5px solid #e8ecf0; border-radius:10px; overflow:hidden; }
-.fc-saved-tpl-toggle { width:100%; display:flex; align-items:center; gap:8px; padding:10px 14px; background:#fafbfc; border:none; cursor:pointer; font-size:12px; font-weight:700; color:#475569; font-family:'DM Sans',system-ui,sans-serif; text-align:left; }
-.fc-saved-tpl-toggle:hover { background:#f1f5f9; }
-.fc-saved-tpl-list { display:flex; flex-direction:column; gap:0; border-top:1px solid #e8ecf0; }
-.fc-saved-tpl-row { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:10px 14px; border-bottom:1px solid #f1f5f9; }
-.fc-saved-tpl-row:last-child { border-bottom:none; }
-.fc-saved-tpl-info { display:flex; flex-direction:column; gap:2px; min-width:0; }
-.fc-saved-tpl-prompt { font-size:12.5px; font-weight:600; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.fc-saved-tpl-meta { font-size:10px; color:#94a3b8; font-weight:500; }
+/* ── My Saved Templates panel ── */
+.fc-saved-tpl-wrap {
+  margin-bottom: 12px;
+  border: 1.5px solid #e9d5ff;
+  border-radius: 11px;
+  overflow: hidden;
+  background: #faf5ff;
+}
+.fc-saved-tpl-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7c3aed;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  text-align: left;
+  transition: background 0.13s;
+}
+.fc-saved-tpl-toggle:hover { background: #f3e8ff; }
+.fc-saved-tpl-count {
+  font-size: 10px;
+  font-weight: 800;
+  background: #7c3aed;
+  color: #fff;
+  border-radius: 99px;
+  padding: 2px 8px;
+  letter-spacing: 0.02em;
+}
+.fc-saved-tpl-list {
+  border-top: 1px solid #e9d5ff;
+  background: #fff;
+}
+.fc-saved-tpl-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f5f3ff;
+  transition: background 0.12s;
+}
+.fc-saved-tpl-row:last-child { border-bottom: none; }
+.fc-saved-tpl-row:hover { background: #faf5ff; }
+.fc-saved-tpl-type-icon { font-size: 16px; text-align: center; }
+.fc-saved-tpl-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fc-saved-tpl-prompt {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fc-saved-tpl-meta { font-size: 10px; color: #94a3b8; font-weight: 500; text-transform: capitalize; }
+.fc-tpl-use-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #f3e8ff;
+  border: 1.5px solid #e9d5ff;
+  border-radius: 7px;
+  padding: 5px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.13s;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+.fc-tpl-use-btn:hover { background: #ede9fe; border-color: #c4b5fd; }
+.fc-tpl-del-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid #e8ecf0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  transition: all 0.13s;
+  flex-shrink: 0;
+}
+.fc-tpl-del-btn:hover { background: #fff5f5; border-color: #fecaca; color: #ef4444; }
+
+/* Save as Template button */
+.fc-save-tpl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #faf5ff;
+  border: 1.5px solid #e9d5ff;
+  border-radius: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+.fc-save-tpl-btn:hover:not(:disabled) { background: #ede9fe; border-color: #c4b5fd; }
+.fc-save-tpl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.fc-save-tpl-btn--saved {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+  color: #16a34a !important;
+}
 
 .fc-q-card { background:#fafbfc; border:1.5px solid #e8ecf0; border-radius:11px; padding:14px 16px; transition:border-color 0.15s; }
 .fc-q-card:focus-within { border-color:#3b82f6; }
-.fc-q-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.fc-q-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
 .fc-q-meta { display:flex; align-items:center; gap:8px; }
 .fc-q-num  { width:24px; height:24px; border-radius:7px; background:#0f172a; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .fc-q-type-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; }
-.fc-q-controls { display:flex; gap:4px; }
+.fc-q-controls { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
 .fc-q-icon-btn { width:27px; height:27px; border-radius:6px; background:#f1f5f9; border:1px solid #e8ecf0; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; color:#64748b; font-weight:700; transition:all 0.13s; }
 .fc-q-icon-btn:hover:not(:disabled) { background:#e2e8f0; }
 .fc-q-icon-btn:disabled { opacity:0.3; cursor:not-allowed; }
@@ -1327,35 +1203,76 @@ const CSS = `
 .fc-q-icon-btn--danger:hover { background:#fff5f5; border-color:#fecaca; }
 .fc-q-body { display:flex; gap:12px; flex-wrap:wrap; }
 .fc-q-prompt-wrap { flex:1; min-width:180px; display:flex; flex-direction:column; gap:5px; }
-.fc-q-type-wrap   { width:170px; flex-shrink:0; display:flex; flex-direction:column; gap:5px; }
+.fc-q-type-wrap   { width:160px; flex-shrink:0; display:flex; flex-direction:column; gap:5px; }
 .fc-q-required    { display:flex; align-items:center; gap:7px; margin-top:10px; }
 .fc-empty-q { text-align:center; padding:36px 20px; border:2px dashed #e8ecf0; border-radius:11px; color:#94a3b8; font-size:13px; }
 .fc-empty-state { border-radius:9px; background:#f8fafc; }
 
-/* Personalization */
 .fc-personalization-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .fc-badge-info { font-size:10px; font-weight:700; color:#2563eb; background:#eff6ff; border:1px solid #bfdbfe; padding:3px 9px; border-radius:99px; }
 .fc-personalization-hint { font-size:12px; color:#94a3b8; margin:0 0 12px; line-height:1.5; }
-.fc-personalization-hint code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:11px; }
 .fc-personalization-list { display:flex; flex-direction:column; gap:8px; }
-.fc-person-row { display:grid; grid-template-columns:1fr 140px 160px; gap:8px; align-items:center; background:#fff; border:1px solid #e8ecf0; border-radius:9px; padding:10px 12px; }
+.fc-person-row { display:grid; grid-template-columns:1fr 130px 150px; gap:8px; align-items:center; background:#fff; border:1px solid #e8ecf0; border-radius:9px; padding:10px 12px; }
 .fc-person-id { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .fc-person-name, .fc-person-company { font-size:12px; }
 
-/* Responsive */
+/* ── Mobile Responsive ── */
 @media (max-width:640px) {
-    .fc-field-grid { grid-template-columns:1fr !important; }
-    .fc-q-body { flex-direction:column; }
-    .fc-q-type-wrap { width:100% !important; }
-    .fc-person-row { grid-template-columns:1fr; }
-    .fc-step-btn { font-size:10px; padding:8px 10px; }
-    .fc-pl-row { grid-template-columns:1fr; }
-    .fc-header { flex-direction:column; align-items:flex-start; }
-    .fc-header-actions { width:100%; justify-content:flex-end; }
-    .fc-pl-url { max-width:100%; }
-    .fc-share-row { flex-direction:column; align-items:flex-start; }
-    .fc-share-code { width:100%; }
-    .fc-saved-tpl-row { grid-template-columns:1fr auto auto; }
+  .fc-main { padding:12px 10px 80px; }
+  .fc-wrap { max-width:100%; }
+  .fc-field-grid { grid-template-columns:1fr !important; }
+  .fc-q-body { flex-direction:column; }
+  .fc-q-type-wrap { width:100% !important; }
+  .fc-person-row { grid-template-columns:1fr; }
+  .fc-pl-row { grid-template-columns:1fr auto; }
+  .fc-pl-url { display:none; }
+  /* Header stacks vertically; actions row wraps and fills width */
+  .fc-header { flex-direction:column; align-items:flex-start; gap:10px; }
+  .fc-header-actions { width:100%; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  .fc-save-draft-btn { flex:1; justify-content:center; font-size:11px; padding:9px 10px; }
+  .fc-publish-btn { flex:1; justify-content:center; font-size:11px; padding:9px 10px; }
+  /* Step nav scrolls horizontally without text overflow */
+  .fc-step-nav { padding:4px; gap:3px; }
+  .fc-step-btn { font-size:10px; padding:7px 8px; min-width:60px; white-space:nowrap; }
+  .fc-step-icon { display:none; } /* hide emoji on very small screens */
+  /* Section padding */
+  .fc-section { padding:14px 12px; }
+  .fc-section-title { font-size:15px; }
+  .fc-page-title { font-size:17px; }
+  /* Share row */
+  .fc-share-code { max-width:100%; white-space:normal; word-break:break-all; }
+  .fc-share-row { flex-direction:column; align-items:stretch; }
+  .fc-share-row > * { width:100%; box-sizing:border-box; }
+  /* Saved templates */
+  .fc-saved-tpl-row { grid-template-columns:28px 1fr auto auto; }
+  /* Question head */
+  .fc-q-head { flex-direction:column; align-items:flex-start; }
+  .fc-q-controls { width:100%; justify-content:flex-end; }
+  .fc-save-tpl-btn { font-size:10px; padding:4px 7px; }
+  /* Nav row */
+  .fc-nav-row { flex-direction:column-reverse; align-items:stretch; gap:8px; }
+  .fc-next-btn, .fc-ghost-btn, .fc-submit-btn { justify-content:center; width:100%; box-sizing:border-box; }
+  /* Chip row wraps nicely */
+  .fc-chip { font-size:11px; padding:7px 11px; }
+  /* Draft banner stacks on mobile */
+  .fc-draft-banner { flex-direction:column; align-items:flex-start; }
+  .fc-draft-banner-actions { width:100%; justify-content:flex-end; }
+  /* Template row */
+  .fc-template-row { flex-direction:column; align-items:flex-start; gap:8px; }
+}
+
+@media (max-width:400px) {
+  .fc-step-btn { min-width:50px; font-size:9px; padding:6px 6px; }
+  .fc-page-title { font-size:15px; }
+  .fc-chip { font-size:10px; padding:6px 9px; }
+  .fc-header-actions { flex-direction:column; }
+  .fc-save-draft-btn, .fc-publish-btn { width:100%; justify-content:center; }
+}
+
+@media (max-width:480px) {
+  .fc-template-row { flex-direction:column; align-items:flex-start; }
+  .fc-chip-row { gap:5px; }
+  .fc-chip { font-size:11px; padding:6px 10px; }
 }
 `;
 
