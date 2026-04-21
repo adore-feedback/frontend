@@ -1,6 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Link, useBlocker, useParams } from "react-router-dom";
-import { createForm, updateForm, updateFormSettings, getForm } from "../../api/feedbackApi";
+import {
+  createForm,
+  updateForm,
+  updateFormSettings,
+  getForm,
+  generateInviteTokens,
+} from "../../api/feedbackApi";
 
 /* ─── helpers ──────────────────────────────────────── */
 const DRAFT_KEY     = "simtrak_form_draft";
@@ -17,9 +23,6 @@ const saveDraft  = (data) => { try { localStorage.setItem(DRAFT_KEY, JSON.string
 const loadDraft  = ()     => { try { const d = localStorage.getItem(DRAFT_KEY); return d ? JSON.parse(d) : null; } catch { return null; } };
 const clearDraft = ()     => { try { localStorage.removeItem(DRAFT_KEY); } catch {} };
 
-/**
- * Load saved templates sorted latest-first.
- */
 const loadSavedTemplates = () => {
   try {
     const raw = localStorage.getItem(TEMPLATES_KEY);
@@ -29,24 +32,17 @@ const loadSavedTemplates = () => {
   } catch { return []; }
 };
 
-/**
- * Save a question as a reusable template (latest-first).
- */
 const saveTemplate = (tpl) => {
   try {
     const existing = loadSavedTemplates();
     const filtered = existing.filter((t) => t.prompt !== tpl.prompt);
     const newEntry = { ...tpl, savedAt: Date.now() };
-    // Always put newest at the front
     const updated = [newEntry, ...filtered];
     localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
     return updated;
   } catch { return []; }
 };
 
-/**
- * Delete a saved template by its prompt text.
- */
 const deleteTemplate = (prompt) => {
   try {
     const existing = loadSavedTemplates();
@@ -155,25 +151,63 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
   );
 };
 
-const PersonalizedLinksPanel = ({ formId, formSlug, personalizations, allowedRespondents }) => {
-  const [copied, setCopied] = useState("");
-  const identifier = formSlug || formId;
-  const base = `${window.location.origin}/form/${identifier}`;
+/**
+ * PersonalizedLinksPanel
+ *
+ * Fetches server-signed invite tokens and builds URLs using window.location.origin
+ * so they always point to the correct domain (fixes the DNS_PROBE_FINISHED_NXDOMAIN error).
+ *
+ * URL format: <origin>/form/<slug>?token=<hmac_signed_token>
+ */
+const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personalizations }) => {
+  const [copied, setCopied]   = useState("");
+  const [tokens, setTokens]   = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
 
-  const buildUrl = (respondentEmail, p) => {
-    const params = new URLSearchParams();
-    params.set("email", respondentEmail);
-    if (p?.name)                     params.set("name",    p.name);
-    if (p?.prefillData?.companyName) params.set("company", p.prefillData.companyName);
-    return `${base}?${params.toString()}`;
-  };
+  useEffect(() => {
+    if (!formId || !allowedRespondents.length) {
+      setTokens([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+
+    generateInviteTokens(formId, allowedRespondents)
+      .then((data) => {
+        if (cancelled) return;
+        // Build full URLs using window.location.origin so they always work
+        // regardless of what APP_URL is set to on the server.
+        const origin     = window.location.origin;
+        const identifier = formSlug || formId;
+        const enriched   = (data.tokens || []).map((t) => ({
+          ...t,
+          // Override the server-generated URL with a correct origin-based URL
+          url: `${origin}/form/${identifier}?token=${t.token}`,
+        }));
+        setTokens(enriched);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Could not generate links.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formId, formSlug, allowedRespondents.join(",")]);
 
   const copyAll = () => {
-    const text = allowedRespondents.map((id) => {
-      const p = personalizations.find((x) => x.identifier === id);
-      return `${p?.name || id}: ${buildUrl(id, p)}`;
-    }).join("\n");
-    navigator.clipboard.writeText(text).then(() => { setCopied("all"); setTimeout(() => setCopied(""), 2000); });
+    const text = tokens
+      .map((t) => `${t.name || t.email}: ${t.url}`)
+      .join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied("all");
+      setTimeout(() => setCopied(""), 2000);
+    });
   };
 
   if (!allowedRespondents.length) return null;
@@ -182,50 +216,64 @@ const PersonalizedLinksPanel = ({ formId, formSlug, personalizations, allowedRes
     <div className="fc-personalized-links">
       <div className="fc-personalized-links-header">
         <p className="fc-sub-label" style={{ margin: 0 }}>🔗 Personalized Links</p>
-        <button type="button" className="fc-copy-btn" onClick={copyAll}>
-          {copied === "all" ? "✓ Copied All" : "Copy All"}
-        </button>
+        {tokens.length > 0 && (
+          <button type="button" className="fc-copy-btn" onClick={copyAll}>
+            {copied === "all" ? "✓ Copied All" : "Copy All"}
+          </button>
+        )}
       </div>
+
       <p style={{ fontSize: 12, color: "#64748b", margin: "6px 0 12px", lineHeight: 1.5 }}>
-        Each link pre-fills the respondent's details and is cryptographically verified on submission.
+        Each link is cryptographically signed for the recipient's email address.
+        Only that person can open and submit — the email cannot be swapped in the URL.
+        Links expire in <strong>7 days</strong>.
       </p>
-      <div className="fc-pl-list">
-        {allowedRespondents.map((id) => {
-          const p   = personalizations.find((x) => x.identifier === id);
-          const url = buildUrl(id, p);
-          return (
-            <div key={id} className="fc-pl-row">
+
+      {loading && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", fontSize: 12, color: "#64748b" }}>
+          <span className="fc-spinner" style={{ borderColor: "#cbd5e1", borderTopColor: "#3b82f6", width: 13, height: 13 }} />
+          Generating secure links…
+        </div>
+      )}
+
+      {error && (
+        <div style={{ fontSize: 12, color: "#dc2626", padding: "8px 0" }}>⚠️ {error}</div>
+      )}
+
+      {!loading && !error && tokens.length > 0 && (
+        <div className="fc-pl-list">
+          {tokens.map((t) => (
+            <div key={t.email} className="fc-pl-row">
               <div className="fc-pl-info">
-                <span className="fc-pl-name">{p?.name || id}</span>
-                <span className="fc-pl-email">{id}</span>
+                <span className="fc-pl-name">{t.name || t.email}</span>
+                <span className="fc-pl-email">{t.email}</span>
               </div>
-              <code className="fc-pl-url" title={url}>{url}</code>
-              <button type="button" className="fc-copy-btn" onClick={() => {
-                navigator.clipboard.writeText(url).then(() => { setCopied(id); setTimeout(() => setCopied(""), 2000); });
-              }}>
-                {copied === id ? "✓" : "Copy"}
+              <code className="fc-pl-url" title={t.url}>{t.url}</code>
+              <button
+                type="button"
+                className="fc-copy-btn"
+                onClick={() => {
+                  navigator.clipboard.writeText(t.url).then(() => {
+                    setCopied(t.email);
+                    setTimeout(() => setCopied(""), 2000);
+                  });
+                }}
+              >
+                {copied === t.email ? "✓" : "Copy"}
               </button>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
-/**
- * SavedTemplatesPanel
- *
- * KEY FIX: Templates are now always sorted newest-first (savedAt DESC).
- * When a template is used via "+ Use", the new question is prepended
- * to the top of the questions list (not appended to the bottom).
- */
 const SavedTemplatesPanel = ({ savedTemplates, onUse, onDelete }) => {
   const [open, setOpen] = useState(true);
 
   if (!savedTemplates.length) return null;
 
-  // Ensure display order is always newest-first
   const sorted = [...savedTemplates].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
 
   return (
@@ -253,20 +301,10 @@ const SavedTemplatesPanel = ({ savedTemplates, onUse, onDelete }) => {
                   {t.optionsText ? ` · Options: ${t.optionsText.split(",").length}` : ""}
                 </span>
               </div>
-              <button
-                type="button"
-                className="fc-tpl-use-btn"
-                onClick={() => onUse(t)}
-                title="Add this question to the top of the form"
-              >
+              <button type="button" className="fc-tpl-use-btn" onClick={() => onUse(t)} title="Add this question to the top of the form">
                 + Use
               </button>
-              <button
-                type="button"
-                className="fc-tpl-del-btn"
-                onClick={() => onDelete(t.prompt)}
-                title="Delete this template"
-              >
+              <button type="button" className="fc-tpl-del-btn" onClick={() => onDelete(t.prompt)} title="Delete this template">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <polyline points="3 6 5 6 21 6" />
                   <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
@@ -300,14 +338,12 @@ const FormCreator = () => {
   const [savedFormId, setSavedFormId]     = useState(isEditMode ? editFormId : null);
   const [savedFormSlug, setSavedFormSlug] = useState("");
 
-  // savedTemplates: sorted latest-first
   const [savedTemplates, setSavedTemplates] = useState(() => loadSavedTemplates());
   const [savingTplIdx, setSavingTplIdx]   = useState(null);
   const [tplToast, setTplToast]           = useState("");
 
   const autoSaveTimerRef = useRef(null);
 
-  /* ── Load existing form when in edit mode ── */
   useEffect(() => {
     if (!isEditMode) return;
     const load = async () => {
@@ -381,10 +417,6 @@ const FormCreator = () => {
   const addQuestion    = () => { setForm((c) => ({ ...c, questions: [...c.questions, emptyQuestion()] })); setIsDirty(true); };
   const removeQuestion = (idx) => { setForm((c) => ({ ...c, questions: c.questions.filter((_, i) => i !== idx) })); setIsDirty(true); };
 
-  /**
-   * KEY FIX: addTemplate now PREPENDS to questions list so newly added
-   * template questions always appear at the TOP, not the bottom.
-   */
   const addTemplate = (t) => {
     const { label, savedAt, ...rest } = t;
     setForm((c) => ({ ...c, questions: [{ ...emptyQuestion(), ...rest }, ...c.questions] }));
@@ -402,10 +434,6 @@ const FormCreator = () => {
     setIsDirty(true);
   };
 
-  /**
-   * handleSaveAsTemplate: save question at `idx`.
-   * After saving, the template appears at the TOP of the saved templates list.
-   */
   const handleSaveAsTemplate = useCallback((idx) => {
     const q = form.questions[idx];
     if (!q.prompt.trim()) return;
@@ -435,13 +463,11 @@ const FormCreator = () => {
 
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
-  /* ── Build payloads ── */
   const buildContentPayload = () => ({
     title: form.title, description: form.description, formType: form.formType,
     collectsPhone: form.collectsPhone, phoneRequired: form.phoneRequired,
     collectsCompanyDetails: form.collectsCompanyDetails, companyDetailsRequired: form.companyDetailsRequired,
     personalizations: form.personalizations,
-    // Strip questions with empty prompts — Mongoose requires prompt to be non-empty
     questions: form.questions
       .filter((q) => q.prompt && q.prompt.trim())
       .map((q) => ({ ...q, options: splitList(q.optionsText), answerTemplates: splitList(q.answerTemplatesText) })),
@@ -461,10 +487,7 @@ const FormCreator = () => {
     },
   });
 
-  /* ── Save as Draft (to server) ── */
   const saveDraftToServer = async () => {
-    // Only require the basics — title and form type — to save a draft.
-    // Questions, settings, etc. are NOT required at draft stage.
     if (!form.title?.trim()) {
       setStatus({ type: "error", message: "Please enter a form title before saving the draft." });
       setActiveSection("basics");
@@ -506,7 +529,6 @@ const FormCreator = () => {
     }
   };
 
-  /* ── Publish / Submit ── */
   const submitForm = async (e) => {
     e.preventDefault();
     if (form.formType === "flash" && !form.closesAt) {
@@ -538,7 +560,9 @@ const FormCreator = () => {
 
       setPublishedFormId(fId);
       setPublishedSlug(fSlug);
-      setShareUrl(`${window.location.origin}/form/${fSlug}`);
+      // Use window.location.origin so the URL is always correct for the current domain
+      const origin = window.location.origin;
+      setShareUrl(`${origin}/form/${fSlug}`);
       setStatus({ type: "success", message: "Form published successfully!", link: `/form/${fSlug}` });
       clearDraft();
       setIsDirty(false);
@@ -560,6 +584,7 @@ const FormCreator = () => {
     { id: "questions", label: `Questions (${form.questions.length})`, icon: "❓" },
   ];
 
+  // Show links panel when: restricted + form saved + respondents exist
   const showLinksInSettings =
     form.visibility === "restricted" &&
     Boolean(savedFormId) &&
@@ -657,12 +682,13 @@ const FormCreator = () => {
                     <Link to={status.link} target="_blank" className="fc-open-btn">Open ↗</Link>
                   </div>
                 )}
+                {/* Personalized links on the done screen */}
                 {form.visibility === "restricted" && allowedRespondents.length > 0 && (
                   <PersonalizedLinksPanel
                     formId={publishedFormId}
                     formSlug={publishedSlug}
-                    personalizations={form.personalizations}
                     allowedRespondents={allowedRespondents}
+                    personalizations={form.personalizations}
                   />
                 )}
               </div>
@@ -780,7 +806,7 @@ const FormCreator = () => {
                     </div>
                     {form.visibility === "restricted" && (
                       <div className="fc-field fc-field--full">
-                        <label className="fc-label">Allowed Respondents <span className="fc-hint">(comma-separated emails or IDs)</span></label>
+                        <label className="fc-label">Allowed Respondents <span className="fc-hint">(comma-separated emails)</span></label>
                         <textarea className="fc-input fc-textarea" style={{ height: 68 }} placeholder="user1@example.com, user2@example.com" value={form.allowedRespondentsText} onChange={(e) => updateField("allowedRespondentsText", e.target.value)} />
                       </div>
                     )}
@@ -814,10 +840,16 @@ const FormCreator = () => {
                     })}
                   </div>
 
+                  {/* Signed personalized links — shown once form is saved */}
                   {showLinksInSettings && (
                     <>
                       <div className="fc-divider" />
-                      <PersonalizedLinksPanel formId={savedFormId} formSlug={savedFormSlug} personalizations={form.personalizations} allowedRespondents={allowedRespondents} />
+                      <PersonalizedLinksPanel
+                        formId={savedFormId}
+                        formSlug={savedFormSlug}
+                        allowedRespondents={allowedRespondents}
+                        personalizations={form.personalizations}
+                      />
                       {isDirty && <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 8, fontStyle: "italic" }}>⚠️ You have unsaved changes — save the draft to refresh the links.</p>}
                     </>
                   )}
@@ -829,7 +861,7 @@ const FormCreator = () => {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round">
                           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                         </svg>
-                        <span>Save the draft first to generate personalized links for your respondents.</span>
+                        <span>Save the draft first to generate secure personalized links for your respondents.</span>
                       </div>
                     </>
                   )}
@@ -858,14 +890,12 @@ const FormCreator = () => {
                     </button>
                   </div>
 
-                  {/* ── MY SAVED TEMPLATES — newest-first, USE prepends to top ── */}
                   <SavedTemplatesPanel
                     savedTemplates={savedTemplates}
                     onUse={addTemplate}
                     onDelete={handleDeleteTemplate}
                   />
 
-                  {/* Built-in quick-add templates */}
                   <div className="fc-template-row">
                     <span className="fc-template-label">Quick add:</span>
                     {BUILTIN_QUESTION_TEMPLATES.map((t) => (
@@ -873,7 +903,6 @@ const FormCreator = () => {
                     ))}
                   </div>
 
-                  {/* Questions list */}
                   <div className="fc-q-list">
                     {form.questions.map((q, idx) => (
                       <div key={idx} className="fc-q-card">
@@ -889,7 +918,7 @@ const FormCreator = () => {
                             <button
                               type="button"
                               className={`fc-save-tpl-btn ${savingTplIdx === idx ? "fc-save-tpl-btn--saved" : ""}`}
-                              title={q.prompt.trim() ? "Save as reusable template (appears at top)" : "Enter a prompt first"}
+                              title={q.prompt.trim() ? "Save as reusable template" : "Enter a prompt first"}
                               onClick={() => handleSaveAsTemplate(idx)}
                               disabled={!q.prompt.trim()}
                             >
@@ -1025,7 +1054,6 @@ const CSS = `
 
 .fc-links-prompt { display:flex; align-items:flex-start; gap:8px; padding:12px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:9px; font-size:12px; color:#1d4ed8; font-weight:500; margin-top:8px; }
 
-/* Step nav — scrollable on mobile */
 .fc-step-nav { display:flex; gap:4px; background:#fff; border:1px solid #e8ecf0; border-radius:11px; padding:5px; margin-bottom:18px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
 .fc-step-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px 10px; border-radius:8px; font-size:11px; font-weight:700; color:#64748b; background:transparent; border:none; cursor:pointer; transition:all 0.15s; white-space:nowrap; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; min-width:80px; }
 .fc-step-btn--active { background:#0f172a; color:#fff; }
@@ -1064,130 +1092,35 @@ const CSS = `
 .fc-spinner { width:13px; height:13px; border:2px solid rgba(255,255,255,0.3); border-top-color:currentColor; border-radius:50%; animation:fc-spin 0.6s linear infinite; display:inline-block; }
 @keyframes fc-spin { to { transform:rotate(360deg); } }
 
-/* ── Questions section ── */
 .fc-q-list { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
 .fc-add-q-btn { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#2563eb; padding:8px 12px; border-radius:8px; font-size:11.5px; font-weight:700; border:1.5px solid #bfdbfe; cursor:pointer; text-transform:uppercase; letter-spacing:0.05em; font-family:'DM Sans',system-ui,sans-serif; white-space:nowrap; }
 
-/* Quick-add built-in templates row */
 .fc-template-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:12px; padding:11px 13px; background:#f8fafc; border-radius:9px; border:1px solid #e8ecf0; }
 .fc-template-label { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; }
 .fc-template-chip { font-size:11px; font-weight:600; color:#475569; background:#fff; border:1.5px solid #e8ecf0; border-radius:99px; padding:5px 11px; cursor:pointer; transition:all 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-template-chip:hover { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; }
 
-/* ── My Saved Templates panel ── */
-.fc-saved-tpl-wrap {
-  margin-bottom: 12px;
-  border: 1.5px solid #e9d5ff;
-  border-radius: 11px;
-  overflow: hidden;
-  background: #faf5ff;
-}
-.fc-saved-tpl-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 14px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  color: #7c3aed;
-  font-family: 'DM Sans', system-ui, sans-serif;
-  text-align: left;
-  transition: background 0.13s;
-}
-.fc-saved-tpl-toggle:hover { background: #f3e8ff; }
-.fc-saved-tpl-count {
-  font-size: 10px;
-  font-weight: 800;
-  background: #7c3aed;
-  color: #fff;
-  border-radius: 99px;
-  padding: 2px 8px;
-  letter-spacing: 0.02em;
-}
-.fc-saved-tpl-list {
-  border-top: 1px solid #e9d5ff;
-  background: #fff;
-}
-.fc-saved-tpl-row {
-  display: grid;
-  grid-template-columns: 28px 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid #f5f3ff;
-  transition: background 0.12s;
-}
-.fc-saved-tpl-row:last-child { border-bottom: none; }
-.fc-saved-tpl-row:hover { background: #faf5ff; }
-.fc-saved-tpl-type-icon { font-size: 16px; text-align: center; }
-.fc-saved-tpl-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.fc-saved-tpl-prompt {
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.fc-saved-tpl-meta { font-size: 10px; color: #94a3b8; font-weight: 500; text-transform: capitalize; }
-.fc-tpl-use-btn {
-  font-size: 11px;
-  font-weight: 700;
-  color: #7c3aed;
-  background: #f3e8ff;
-  border: 1.5px solid #e9d5ff;
-  border-radius: 7px;
-  padding: 5px 11px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.13s;
-  font-family: 'DM Sans', system-ui, sans-serif;
-}
-.fc-tpl-use-btn:hover { background: #ede9fe; border-color: #c4b5fd; }
-.fc-tpl-del-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid #e8ecf0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  transition: all 0.13s;
-  flex-shrink: 0;
-}
-.fc-tpl-del-btn:hover { background: #fff5f5; border-color: #fecaca; color: #ef4444; }
+.fc-saved-tpl-wrap { margin-bottom:12px; border:1.5px solid #e9d5ff; border-radius:11px; overflow:hidden; background:#faf5ff; }
+.fc-saved-tpl-toggle { width:100%; display:flex; align-items:center; gap:8px; padding:11px 14px; background:transparent; border:none; cursor:pointer; font-size:12px; font-weight:700; color:#7c3aed; font-family:'DM Sans',system-ui,sans-serif; text-align:left; transition:background 0.13s; }
+.fc-saved-tpl-toggle:hover { background:#f3e8ff; }
+.fc-saved-tpl-count { font-size:10px; font-weight:800; background:#7c3aed; color:#fff; border-radius:99px; padding:2px 8px; letter-spacing:0.02em; }
+.fc-saved-tpl-list { border-top:1px solid #e9d5ff; background:#fff; }
+.fc-saved-tpl-row { display:grid; grid-template-columns:28px 1fr auto auto; gap:8px; align-items:center; padding:10px 14px; border-bottom:1px solid #f5f3ff; transition:background 0.12s; }
+.fc-saved-tpl-row:last-child { border-bottom:none; }
+.fc-saved-tpl-row:hover { background:#faf5ff; }
+.fc-saved-tpl-type-icon { font-size:16px; text-align:center; }
+.fc-saved-tpl-info { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.fc-saved-tpl-prompt { font-size:13px; font-weight:600; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fc-saved-tpl-meta { font-size:10px; color:#94a3b8; font-weight:500; text-transform:capitalize; }
+.fc-tpl-use-btn { font-size:11px; font-weight:700; color:#7c3aed; background:#f3e8ff; border:1.5px solid #e9d5ff; border-radius:7px; padding:5px 11px; cursor:pointer; white-space:nowrap; transition:all 0.13s; font-family:'DM Sans',system-ui,sans-serif; }
+.fc-tpl-use-btn:hover { background:#ede9fe; border-color:#c4b5fd; }
+.fc-tpl-del-btn { width:26px; height:26px; border-radius:6px; background:transparent; border:1px solid #e8ecf0; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#94a3b8; transition:all 0.13s; flex-shrink:0; }
+.fc-tpl-del-btn:hover { background:#fff5f5; border-color:#fecaca; color:#ef4444; }
 
-/* Save as Template button */
-.fc-save-tpl-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #7c3aed;
-  background: #faf5ff;
-  border: 1.5px solid #e9d5ff;
-  border-radius: 7px;
-  padding: 5px 9px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-  font-family: 'DM Sans', system-ui, sans-serif;
-}
-.fc-save-tpl-btn:hover:not(:disabled) { background: #ede9fe; border-color: #c4b5fd; }
-.fc-save-tpl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.fc-save-tpl-btn--saved {
-  background: #f0fdf4 !important;
-  border-color: #bbf7d0 !important;
-  color: #16a34a !important;
-}
+.fc-save-tpl-btn { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:#7c3aed; background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:7px; padding:5px 9px; cursor:pointer; white-space:nowrap; transition:all 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
+.fc-save-tpl-btn:hover:not(:disabled) { background:#ede9fe; border-color:#c4b5fd; }
+.fc-save-tpl-btn:disabled { opacity:0.4; cursor:not-allowed; }
+.fc-save-tpl-btn--saved { background:#f0fdf4 !important; border-color:#bbf7d0 !important; color:#16a34a !important; }
 
 .fc-q-card { background:#fafbfc; border:1.5px solid #e8ecf0; border-radius:11px; padding:14px 16px; transition:border-color 0.15s; }
 .fc-q-card:focus-within { border-color:#3b82f6; }
@@ -1216,7 +1149,6 @@ const CSS = `
 .fc-person-id { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .fc-person-name, .fc-person-company { font-size:12px; }
 
-/* ── Mobile Responsive ── */
 @media (max-width:640px) {
   .fc-main { padding:12px 10px 80px; }
   .fc-wrap { max-width:100%; }
@@ -1226,38 +1158,28 @@ const CSS = `
   .fc-person-row { grid-template-columns:1fr; }
   .fc-pl-row { grid-template-columns:1fr auto; }
   .fc-pl-url { display:none; }
-  /* Header stacks vertically; actions row wraps and fills width */
   .fc-header { flex-direction:column; align-items:flex-start; gap:10px; }
   .fc-header-actions { width:100%; justify-content:space-between; flex-wrap:wrap; gap:8px; }
   .fc-save-draft-btn { flex:1; justify-content:center; font-size:11px; padding:9px 10px; }
   .fc-publish-btn { flex:1; justify-content:center; font-size:11px; padding:9px 10px; }
-  /* Step nav scrolls horizontally without text overflow */
   .fc-step-nav { padding:4px; gap:3px; }
   .fc-step-btn { font-size:10px; padding:7px 8px; min-width:60px; white-space:nowrap; }
-  .fc-step-icon { display:none; } /* hide emoji on very small screens */
-  /* Section padding */
+  .fc-step-icon { display:none; }
   .fc-section { padding:14px 12px; }
   .fc-section-title { font-size:15px; }
   .fc-page-title { font-size:17px; }
-  /* Share row */
   .fc-share-code { max-width:100%; white-space:normal; word-break:break-all; }
   .fc-share-row { flex-direction:column; align-items:stretch; }
   .fc-share-row > * { width:100%; box-sizing:border-box; }
-  /* Saved templates */
   .fc-saved-tpl-row { grid-template-columns:28px 1fr auto auto; }
-  /* Question head */
   .fc-q-head { flex-direction:column; align-items:flex-start; }
   .fc-q-controls { width:100%; justify-content:flex-end; }
   .fc-save-tpl-btn { font-size:10px; padding:4px 7px; }
-  /* Nav row */
   .fc-nav-row { flex-direction:column-reverse; align-items:stretch; gap:8px; }
   .fc-next-btn, .fc-ghost-btn, .fc-submit-btn { justify-content:center; width:100%; box-sizing:border-box; }
-  /* Chip row wraps nicely */
   .fc-chip { font-size:11px; padding:7px 11px; }
-  /* Draft banner stacks on mobile */
   .fc-draft-banner { flex-direction:column; align-items:flex-start; }
   .fc-draft-banner-actions { width:100%; justify-content:flex-end; }
-  /* Template row */
   .fc-template-row { flex-direction:column; align-items:flex-start; gap:8px; }
 }
 

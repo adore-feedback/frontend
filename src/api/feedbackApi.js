@@ -63,8 +63,6 @@ export const getForms = (filters = {}) => {
     params.set("status", filters.status);
   }
 
-  // Always include deleted forms so they persist after refresh.
-  // The caller decides whether to display them via the active tab filter.
   params.set("includeDeleted", "true");
 
   const query = params.toString() ? `?${params.toString()}` : "";
@@ -95,11 +93,41 @@ export const updateForm = (formId, form) =>
     body: JSON.stringify(form),
   });
 
+export const generateInviteTokens = (formId, emails = []) =>
+  request(`/forms/${encodeURIComponent(formId)}/invite-tokens`, {
+    method: "POST",
+    body: JSON.stringify({ emails }),
+  });
+
+/**
+ * getPublicForm
+ *
+ * Access modes:
+ *   1. Public form         → no access params needed
+ *   2. Signed invite link  → pass { token: "<hmac_token>" }  (from ?token= URL param)
+ *   3. Gate-verified email → pass { email: "<user_email>" }  (from EmailIdentityGate)
+ *
+ * Mode 3 is the new "no OAuth" flow for restricted forms:
+ *   - User enters their email in the gate UI
+ *   - Frontend passes it here
+ *   - Server checks it against allowedRespondents
+ *   - Returns 403 EMAIL_NOT_ALLOWED if not on the list
+ *   - Returns prefill + accessToken on success
+ *
+ * After a successful call the server issues a short-lived (2h) accessToken
+ * stored in sessionStorage and auto-attached by submitPublicFormResponse.
+ */
 export const getPublicForm = async (formId, access = {}) => {
   const params = new URLSearchParams();
-  Object.entries(access).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
+
+  if (access.token) {
+    // Signed invite-link token — server verifies HMAC
+    params.set("token", access.token);
+  } else if (access.email) {
+    // Gate-entered email — server checks allowedRespondents list
+    params.set("email", access.email.toLowerCase().trim());
+  }
+
   const query = params.toString() ? `?${params.toString()}` : "";
 
   const data = await request(
