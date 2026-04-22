@@ -8,7 +8,7 @@ import {
   generateInviteTokens,
 } from "../../api/feedbackApi";
 
-/* ─── helpers ──────────────────────────────────────── */
+/* ─── helpers ──────────────────────────────────── */
 const DRAFT_KEY     = "simtrak_form_draft";
 const TEMPLATES_KEY = "simtrak_question_templates";
 
@@ -56,23 +56,51 @@ const defaultClosesAt = (formType) => {
   if (formType === "flash") return "";
   const d = new Date();
   d.setDate(d.getDate() + 5);
-  return d.toISOString().slice(0, 16);
+  // Return local datetime string for datetime-local input
+  return toLocalDatetimeString(d);
+};
+
+/**
+ * FIX: opensAt / closesAt datetime conversion
+ * datetime-local inputs give "YYYY-MM-DDTHH:mm" in LOCAL time.
+ * We must NOT use new Date(localString).toISOString() because that converts
+ * to UTC and shifts the time. Instead we keep the string as-is and only
+ * convert to ISO when sending to the server.
+ */
+const toLocalDatetimeString = (dateOrIso) => {
+  if (!dateOrIso) return "";
+  const d = typeof dateOrIso === "string" ? new Date(dateOrIso) : dateOrIso;
+  if (isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const localDatetimeToISO = (localStr) => {
+  if (!localStr) return null;
+  // localStr is "YYYY-MM-DDTHH:mm" — treat as local time
+  const d = new Date(localStr);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
 };
 
 const formToState = (apiForm) => ({
   title:                  apiForm.title        || "",
+  displayTitle:           apiForm.displayTitle !== undefined ? apiForm.displayTitle : apiForm.title || "",
+  showTitleToUser:        apiForm.showTitleToUser !== undefined ? apiForm.showTitleToUser : false,
   description:            apiForm.description  || "",
   formType:               apiForm.formType     || "",
   status:                 apiForm.status       || "draft",
   visibility:             apiForm.visibility   || "public",
   allowedRespondentsText: (apiForm.allowedRespondents || []).join(", "),
+  collectsName:           apiForm.collectsName !== undefined ? apiForm.collectsName : true,
   collectsPhone:          !!apiForm.collectsPhone,
   phoneRequired:          !!apiForm.phoneRequired,
   collectsCompanyDetails: !!apiForm.collectsCompanyDetails,
   companyDetailsRequired: !!apiForm.companyDetailsRequired,
   duplicateCheckFields:   apiForm.duplicateCheckFields || ["email"],
-  opensAt:    apiForm.availability?.opensAt  ? new Date(apiForm.availability.opensAt).toISOString().slice(0, 16)  : "",
-  closesAt:   apiForm.availability?.closesAt ? new Date(apiForm.availability.closesAt).toISOString().slice(0, 16) : "",
+  // FIX: convert stored ISO → local datetime string for the input
+  opensAt:    apiForm.availability?.opensAt  ? toLocalDatetimeString(new Date(apiForm.availability.opensAt))  : "",
+  closesAt:   apiForm.availability?.closesAt ? toLocalDatetimeString(new Date(apiForm.availability.closesAt)) : "",
   singleSession: !!apiForm.availability?.singleSession,
   sessionKey:    apiForm.availability?.sessionKey || "",
   questions: (apiForm.questions || []).map((q) => ({
@@ -84,17 +112,21 @@ const formToState = (apiForm) => ({
 });
 
 const BUILTIN_QUESTION_TEMPLATES = [
-  { label: "Overall Rating",  prompt: "How would you rate your overall experience?", type: "rating",        required: true,  optionsText: "", answerTemplatesText: "" },
-  { label: "What Worked",     prompt: "What did you like the most?",                type: "text",          required: false, optionsText: "", answerTemplatesText: "The session was useful because...,I liked the presenter because..." },
-  { label: "Improvements",    prompt: "What could be improved?",                   type: "text",          required: false, optionsText: "", answerTemplatesText: "More examples would help,The session was too long" },
-  { label: "Recommend?",      prompt: "Would you recommend this to others?",       type: "single-choice", required: false, optionsText: "Yes definitely,Probably yes,Not sure,Probably not", answerTemplatesText: "" },
+  { label: "Overall Rating",  prompt: "How would you rate your overall experience?", type: "rating",           required: true,  optionsText: "", answerTemplatesText: "" },
+  { label: "What Worked",     prompt: "What did you like the most?",                type: "text",             required: false, optionsText: "", answerTemplatesText: "The session was useful because...,I liked the presenter because..." },
+  { label: "Improvements",    prompt: "What could be improved?",                   type: "text",             required: false, optionsText: "", answerTemplatesText: "More examples would help,The session was too long" },
+  { label: "Recommend?",      prompt: "Would you recommend this to others?",       type: "single-choice",    required: false, optionsText: "Yes definitely,Probably yes,Not sure,Probably not", answerTemplatesText: "" },
+  { label: "Multi Select",    prompt: "Which topics were most useful?",            type: "multiple-choice",  required: false, optionsText: "Topic A,Topic B,Topic C,Topic D", answerTemplatesText: "" },
 ];
 
 const QTYPE_ICONS = { text: "✍️", rating: "⭐", "single-choice": "🔘", "multiple-choice": "☑️" };
 
 const INITIAL_FORM = {
-  title: "", description: "", formType: "", status: "draft", visibility: "public",
-  allowedRespondentsText: "", collectsPhone: true, phoneRequired: false,
+  title: "", displayTitle: "", showTitleToUser: false,
+  description: "", formType: "", status: "draft", visibility: "public",
+  allowedRespondentsText: "",
+  collectsName: true,
+  collectsPhone: true, phoneRequired: false,
   collectsCompanyDetails: true, companyDetailsRequired: false,
   duplicateCheckFields: ["email", "phone"], opensAt: "", closesAt: "",
   singleSession: false, sessionKey: "", questions: [emptyQuestion()], personalizations: [],
@@ -151,14 +183,6 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
   );
 };
 
-/**
- * PersonalizedLinksPanel
- *
- * Fetches server-signed invite tokens and builds URLs using window.location.origin
- * so they always point to the correct domain (fixes the DNS_PROBE_FINISHED_NXDOMAIN error).
- *
- * URL format: <origin>/form/<slug>?token=<hmac_signed_token>
- */
 const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personalizations }) => {
   const [copied, setCopied]   = useState("");
   const [tokens, setTokens]   = useState([]);
@@ -178,13 +202,10 @@ const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personal
     generateInviteTokens(formId, allowedRespondents)
       .then((data) => {
         if (cancelled) return;
-        // Build full URLs using window.location.origin so they always work
-        // regardless of what APP_URL is set to on the server.
         const origin     = window.location.origin;
         const identifier = formSlug || formId;
         const enriched   = (data.tokens || []).map((t) => ({
           ...t,
-          // Override the server-generated URL with a correct origin-based URL
           url: `${origin}/form/${identifier}?token=${t.token}`,
         }));
         setTokens(enriched);
@@ -464,15 +485,23 @@ const FormCreator = () => {
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
   const buildContentPayload = () => ({
-    title: form.title, description: form.description, formType: form.formType,
-    collectsPhone: form.collectsPhone, phoneRequired: form.phoneRequired,
-    collectsCompanyDetails: form.collectsCompanyDetails, companyDetailsRequired: form.companyDetailsRequired,
-    personalizations: form.personalizations,
+    title:                  form.title,
+    displayTitle:           form.showTitleToUser ? (form.displayTitle || form.title) : "",
+    showTitleToUser:        form.showTitleToUser,
+    description:            form.description,
+    formType:               form.formType,
+    collectsName:           form.collectsName,
+    collectsPhone:          form.collectsPhone,
+    phoneRequired:          form.phoneRequired,
+    collectsCompanyDetails: form.collectsCompanyDetails,
+    companyDetailsRequired: form.companyDetailsRequired,
+    personalizations:       form.personalizations,
     questions: form.questions
       .filter((q) => q.prompt && q.prompt.trim())
       .map((q) => ({ ...q, options: splitList(q.optionsText), answerTemplates: splitList(q.answerTemplatesText) })),
   });
 
+  // FIX: Convert local datetime strings to ISO before sending to server
   const buildSettingsPayload = (overrideStatus) => ({
     status:               overrideStatus || form.status,
     visibility:           form.visibility,
@@ -480,8 +509,8 @@ const FormCreator = () => {
     personalizations:     form.personalizations,
     duplicateCheckFields: form.duplicateCheckFields,
     availability: {
-      opensAt:       form.opensAt       || null,
-      closesAt:      form.closesAt      || null,
+      opensAt:       localDatetimeToISO(form.opensAt),
+      closesAt:      localDatetimeToISO(form.closesAt),
       singleSession: form.singleSession,
       sessionKey:    form.sessionKey,
     },
@@ -560,7 +589,6 @@ const FormCreator = () => {
 
       setPublishedFormId(fId);
       setPublishedSlug(fSlug);
-      // Use window.location.origin so the URL is always correct for the current domain
       const origin = window.location.origin;
       setShareUrl(`${origin}/form/${fSlug}`);
       setStatus({ type: "success", message: "Form published successfully!", link: `/form/${fSlug}` });
@@ -584,7 +612,6 @@ const FormCreator = () => {
     { id: "questions", label: `Questions (${form.questions.length})`, icon: "❓" },
   ];
 
-  // Show links panel when: restricted + form saved + respondents exist
   const showLinksInSettings =
     form.visibility === "restricted" &&
     Boolean(savedFormId) &&
@@ -682,7 +709,6 @@ const FormCreator = () => {
                     <Link to={status.link} target="_blank" className="fc-open-btn">Open ↗</Link>
                   </div>
                 )}
-                {/* Personalized links on the done screen */}
                 {form.visibility === "restricted" && allowedRespondents.length > 0 && (
                   <PersonalizedLinksPanel
                     formId={publishedFormId}
@@ -720,8 +746,17 @@ const FormCreator = () => {
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
-                      <label className="fc-label">Form Title <span className="fc-req">*</span></label>
-                      <input className="fc-input" required value={form.title} onChange={(e) => updateField("title", e.target.value)} placeholder="e.g. Webinar Feedback" />
+                      <label className="fc-label">
+                        Internal Form Title <span className="fc-req">*</span>
+                        <span className="fc-hint"> (for your reference only)</span>
+                      </label>
+                      <input
+                        className="fc-input"
+                        required
+                        value={form.title}
+                        onChange={(e) => updateField("title", e.target.value)}
+                        placeholder="e.g. Webinar Feedback — Q1 2025"
+                      />
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">Form Type <span className="fc-req">*</span></label>
@@ -733,6 +768,43 @@ const FormCreator = () => {
                         <option value="event">🎫 Event Feedback</option>
                       </select>
                     </div>
+
+                    {/* FIX: Show Title toggle — default OFF (title hidden from respondents) */}
+                    <div className="fc-field fc-field--full">
+                      <div className="fc-toggle-row">
+                        <div className="fc-toggle-info">
+                          <span className="fc-label" style={{ marginBottom: 0 }}>Show Title to Respondent</span>
+                          <span className="fc-toggle-desc">
+                            {form.showTitleToUser
+                              ? "Respondents will see the display title on the form header."
+                              : "Title is hidden from respondents (internal use only). Default: OFF."}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`fc-toggle-btn ${form.showTitleToUser ? "fc-toggle-btn--on" : ""}`}
+                          onClick={() => updateField("showTitleToUser", !form.showTitleToUser)}
+                        >
+                          <span className="fc-toggle-thumb" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Display title — only shown when showTitleToUser is ON */}
+                    {form.showTitleToUser && (
+                      <div className="fc-field fc-field--full">
+                        <label className="fc-label">
+                          Display Title <span className="fc-hint">(what respondents see — leave blank to use internal title)</span>
+                        </label>
+                        <input
+                          className="fc-input"
+                          value={form.displayTitle}
+                          onChange={(e) => updateField("displayTitle", e.target.value)}
+                          placeholder={form.title || "Shown to respondents on the form header"}
+                        />
+                      </div>
+                    )}
+
                     <div className="fc-field fc-field--full">
                       <label className="fc-label">Description</label>
                       <textarea className="fc-input fc-textarea" value={form.description} onChange={(e) => updateField("description", e.target.value)} placeholder="Briefly describe the purpose of this form…" />
@@ -741,8 +813,11 @@ const FormCreator = () => {
 
                   <div className="fc-divider" />
                   <p className="fc-sub-label">Data Collection</p>
+
+                  {/* FIX: collectsName chip — now clearly labelled and functional */}
                   <div className="fc-chip-row">
                     {[
+                      ["collectsName",           "👤 Collect Name"],
                       ["collectsPhone",          "📱 Collect Phone"],
                       ["phoneRequired",          "🔒 Phone Required"],
                       ["collectsCompanyDetails", "🏢 Company Details"],
@@ -752,6 +827,16 @@ const FormCreator = () => {
                         className={`fc-chip ${form[key] ? "fc-chip--on" : ""}`}>{lbl}</button>
                     ))}
                   </div>
+
+                  {/* Info notes */}
+                  {!form.collectsName && (
+                    <div className="fc-info-note" style={{ marginTop: 10 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round">
+                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>Name field will be hidden from respondents. Responses will appear as "Anonymous".</span>
+                    </div>
+                  )}
 
                   <div className="fc-nav-row">
                     <span />
@@ -786,18 +871,31 @@ const FormCreator = () => {
                         <option value="restricted">🔒 Restricted Users</option>
                       </select>
                     </div>
+
+                    {/* FIX: datetime-local inputs now store local time directly — no UTC shift */}
                     <div className="fc-field">
-                      <label className="fc-label">Opens At</label>
-                      <input className="fc-input" type="datetime-local" value={form.opensAt} onChange={(e) => updateField("opensAt", e.target.value)} />
+                      <label className="fc-label">Opens At <span className="fc-hint">(your local time)</span></label>
+                      <input
+                        className="fc-input"
+                        type="datetime-local"
+                        value={form.opensAt}
+                        onChange={(e) => updateField("opensAt", e.target.value)}
+                      />
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">
                         Closes At{" "}
                         {form.formType === "flash"
                           ? <span className="fc-req">* required for flash</span>
-                          : <span className="fc-hint">(defaults to 5 days)</span>}
+                          : <span className="fc-hint">(defaults to 5 days · your local time)</span>}
                       </label>
-                      <input className="fc-input" type="datetime-local" required={form.formType === "flash"} value={form.closesAt} onChange={(e) => updateField("closesAt", e.target.value)} />
+                      <input
+                        className="fc-input"
+                        type="datetime-local"
+                        required={form.formType === "flash"}
+                        value={form.closesAt}
+                        onChange={(e) => updateField("closesAt", e.target.value)}
+                      />
                       {form.formType === "flash" && !form.closesAt && (
                         <span style={{ fontSize: 10, color: "#ef4444", marginTop: 2, display: "block" }}>
                           ⚡ Flash forms require a closing time before publishing.
@@ -840,7 +938,6 @@ const FormCreator = () => {
                     })}
                   </div>
 
-                  {/* Signed personalized links — shown once form is saved */}
                   {showLinksInSettings && (
                     <>
                       <div className="fc-divider" />
@@ -942,12 +1039,18 @@ const FormCreator = () => {
                               <option value="text">✍️ Text Answer</option>
                               <option value="rating">⭐ Star Rating</option>
                               <option value="single-choice">🔘 Single Choice</option>
+                              <option value="multiple-choice">☑️ Multiple Choice</option>
                             </select>
                           </div>
                         </div>
                         {(q.type === "single-choice" || q.type === "multiple-choice") && (
                           <div style={{ marginTop: 10 }}>
-                            <label className="fc-label">Options <span className="fc-hint">(comma-separated)</span></label>
+                            <label className="fc-label">
+                              Options <span className="fc-hint">(comma-separated)</span>
+                              {q.type === "multiple-choice" && (
+                                <span className="fc-badge-multi">Multi-select enabled</span>
+                              )}
+                            </label>
                             <input className="fc-input" placeholder="Yes, No, Maybe, Not sure" value={q.optionsText} onChange={(e) => updateQuestion(idx, "optionsText", e.target.value)} />
                           </div>
                         )}
@@ -1074,6 +1177,17 @@ const CSS = `
 .fc-input:focus { border-color:#3b82f6; background:#fff; box-shadow:0 0 0 3px rgba(59,130,246,0.1); }
 .fc-textarea { height:80px; resize:vertical; }
 
+/* Toggle switch */
+.fc-toggle-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 14px; background:#f8fafc; border:1px solid #e8ecf0; border-radius:10px; }
+.fc-toggle-info { display:flex; flex-direction:column; gap:3px; flex:1; }
+.fc-toggle-desc { font-size:12px; color:#64748b; font-weight:400; }
+.fc-toggle-btn { position:relative; width:44px; height:24px; border-radius:99px; background:#e2e8f0; border:none; cursor:pointer; transition:background 0.2s; flex-shrink:0; padding:0; }
+.fc-toggle-btn--on { background:#3b82f6; }
+.fc-toggle-thumb { position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:transform 0.2s; display:block; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+.fc-toggle-btn--on .fc-toggle-thumb { transform:translateX(20px); }
+
+.fc-info-note { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:12px; color:#1d4ed8; font-weight:500; line-height:1.5; }
+
 .fc-divider  { height:1px; background:#f1f5f9; margin:18px 0; }
 .fc-sub-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px; }
 .fc-chip-row { display:flex; flex-wrap:wrap; gap:7px; }
@@ -1099,6 +1213,8 @@ const CSS = `
 .fc-template-label { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; }
 .fc-template-chip { font-size:11px; font-weight:600; color:#475569; background:#fff; border:1.5px solid #e8ecf0; border-radius:99px; padding:5px 11px; cursor:pointer; transition:all 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
 .fc-template-chip:hover { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; }
+
+.fc-badge-multi { display:inline-block; font-size:9px; font-weight:700; color:#7c3aed; background:#f3e8ff; border:1px solid #e9d5ff; border-radius:99px; padding:2px 7px; margin-left:6px; text-transform:none; letter-spacing:0; vertical-align:middle; }
 
 .fc-saved-tpl-wrap { margin-bottom:12px; border:1.5px solid #e9d5ff; border-radius:11px; overflow:hidden; background:#faf5ff; }
 .fc-saved-tpl-toggle { width:100%; display:flex; align-items:center; gap:8px; padding:11px 14px; background:transparent; border:none; cursor:pointer; font-size:12px; font-weight:700; color:#7c3aed; font-family:'DM Sans',system-ui,sans-serif; text-align:left; transition:background 0.13s; }
@@ -1136,7 +1252,7 @@ const CSS = `
 .fc-q-icon-btn--danger:hover { background:#fff5f5; border-color:#fecaca; }
 .fc-q-body { display:flex; gap:12px; flex-wrap:wrap; }
 .fc-q-prompt-wrap { flex:1; min-width:180px; display:flex; flex-direction:column; gap:5px; }
-.fc-q-type-wrap   { width:160px; flex-shrink:0; display:flex; flex-direction:column; gap:5px; }
+.fc-q-type-wrap   { width:180px; flex-shrink:0; display:flex; flex-direction:column; gap:5px; }
 .fc-q-required    { display:flex; align-items:center; gap:7px; margin-top:10px; }
 .fc-empty-q { text-align:center; padding:36px 20px; border:2px dashed #e8ecf0; border-radius:11px; color:#94a3b8; font-size:13px; }
 .fc-empty-state { border-radius:9px; background:#f8fafc; }
@@ -1181,6 +1297,7 @@ const CSS = `
   .fc-draft-banner { flex-direction:column; align-items:flex-start; }
   .fc-draft-banner-actions { width:100%; justify-content:flex-end; }
   .fc-template-row { flex-direction:column; align-items:flex-start; gap:8px; }
+  .fc-toggle-row { flex-direction:column; align-items:flex-start; gap:10px; }
 }
 
 @media (max-width:400px) {

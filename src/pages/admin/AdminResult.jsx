@@ -167,7 +167,6 @@ const AdminResult = () => {
   // Form switcher state
   const [formSearchInput, setFormSearchInput] = useState("");
   const [formSearchOpen, setFormSearchOpen] = useState(false);
-  // Track if user has typed anything in the form switcher search
   const [hasSearched, setHasSearched] = useState(false);
   const formSearchRef = useRef(null);
   const formSearchInputRef = useRef(null);
@@ -281,16 +280,9 @@ const AdminResult = () => {
 
   const currentForm = result?.form;
 
-  /* ── Form search list ──
-   * Shows ALL statuses (live, draft, closed, deleted) sorted:
-   * live first → draft → closed → deleted.
-   * Only renders results when user has typed in the search box (search-first UX).
-   * Active/current form is always shown at the top as a pinned item.
-   */
   const STATUS_ORDER = { live: 0, draft: 1, closed: 2, deleted: 3 };
 
   const sortedAllForms = [...allForms].sort((a, b) => {
-    // Current form always first
     const aIsActive = (a._id || a.id) === formId ? -1 : 0;
     const bIsActive = (b._id || b.id) === formId ? -1 : 0;
     if (aIsActive !== bIsActive) return aIsActive - bIsActive;
@@ -303,7 +295,6 @@ const AdminResult = () => {
       )
     : sortedAllForms;
 
-  // Group for display: active form pinned, then grouped by status
   const activeFormEntry = allForms.find((f) => (f._id || f.id) === formId);
   const otherForms = filteredFormList.filter((f) => (f._id || f.id) !== formId);
 
@@ -609,7 +600,6 @@ const AdminResult = () => {
             <div ref={formSearchRef} style={{ position: "relative" }}>
               <p className="ar-top-eyebrow">Results for</p>
 
-              {/* ── Trigger button: shows active form title ── */}
               <button
                 className={`ar-form-switcher-btn${formSearchOpen ? " ar-form-switcher-btn--open" : ""}`}
                 onClick={() => {
@@ -618,7 +608,6 @@ const AdminResult = () => {
                   setFormSearchInput("");
                   setHasSearched(false);
                   if (next) {
-                    // Auto-focus the input after opening
                     setTimeout(() => formSearchInputRef.current?.focus(), 50);
                   }
                 }}
@@ -652,7 +641,6 @@ const AdminResult = () => {
               {/* ── Search panel ── */}
               {formSearchOpen && (
                 <div className="ar-fsp" role="listbox">
-                  {/* Search bar */}
                   <div className="ar-fsp-search">
                     <svg
                       className="ar-fsp-search-icon"
@@ -704,9 +692,7 @@ const AdminResult = () => {
                     )}
                   </div>
 
-                  {/* Results list */}
                   <div className="ar-fsp-list">
-                    {/* Always show current/active form pinned at top */}
                     {activeFormEntry && (
                       <div className="ar-fsp-group">
                         <div className="ar-fsp-group-label">
@@ -726,7 +712,6 @@ const AdminResult = () => {
                       </div>
                     )}
 
-                    {/* Other forms only appear after user starts typing */}
                     {!hasSearched && !formSearchInput && (
                       <div className="ar-fsp-hint">
                         <svg
@@ -745,7 +730,6 @@ const AdminResult = () => {
                       </div>
                     )}
 
-                    {/* Search results (other forms) */}
                     {hasSearched && (
                       <>
                         {filteredFormList.filter(
@@ -770,7 +754,6 @@ const AdminResult = () => {
                           </div>
                         ) : (
                           <>
-                            {/* Live */}
                             {groupedOthers.live.length > 0 && (
                               <div className="ar-fsp-group">
                                 <div className="ar-fsp-group-label">
@@ -782,7 +765,6 @@ const AdminResult = () => {
                                 )}
                               </div>
                             )}
-                            {/* Draft */}
                             {groupedOthers.draft.length > 0 && (
                               <div className="ar-fsp-group">
                                 <div className="ar-fsp-group-label">
@@ -794,7 +776,6 @@ const AdminResult = () => {
                                 )}
                               </div>
                             )}
-                            {/* Closed */}
                             {groupedOthers.closed.length > 0 && (
                               <div className="ar-fsp-group">
                                 <div className="ar-fsp-group-label">
@@ -806,7 +787,6 @@ const AdminResult = () => {
                                 )}
                               </div>
                             )}
-                            {/* Deleted */}
                             {groupedOthers.deleted.length > 0 && (
                               <div className="ar-fsp-group">
                                 <div className="ar-fsp-group-label">
@@ -824,7 +804,6 @@ const AdminResult = () => {
                     )}
                   </div>
 
-                  {/* Footer hint */}
                   <div className="ar-fsp-footer">
                     <kbd className="ar-fsp-kbd">↑↓</kbd> navigate &nbsp;·&nbsp;{" "}
                     <kbd className="ar-fsp-kbd">↵</kbd> select &nbsp;·&nbsp;{" "}
@@ -1108,10 +1087,16 @@ const AdminResult = () => {
                       marginTop: 12,
                     }}
                   >
+                    {/*
+                      ── CHANGED: sentimentData[2] (Negative) is now displayed as "Average"
+                      with a neutral amber color and 📊 icon instead of red/😞.
+                      The underlying data key stays "negative" (server unchanged),
+                      only the display label and styling change here.
+                    */}
                     {[
-                      { data: sentimentData[0], color: "#10b981", emoji: "😊" },
-                      { data: sentimentData[1], color: "#f59e0b", emoji: "😐" },
-                      { data: sentimentData[2], color: "#ef4444", emoji: "😞" },
+                      { data: sentimentData[0], color: "#10b981", emoji: "😊", displayLabel: null },
+                      { data: sentimentData[1], color: "#f59e0b", emoji: "😐", displayLabel: null },
+                      { data: sentimentData[2], color: "#6366f1", emoji: "📊", displayLabel: "Average" },
                     ]
                       .filter((i) => i.data)
                       .map((item) => (
@@ -1134,7 +1119,8 @@ const AdminResult = () => {
                               width: 55,
                             }}
                           >
-                            {item.data.label}
+                            {/* Use displayLabel override if provided, else use server label */}
+                            {item.displayLabel || item.data.label}
                           </span>
                           <ProgressBar
                             value={item.data.count}
@@ -1458,7 +1444,6 @@ const CSS = `
 .ar-back-btn:hover { background:#f1f5f9; }
 .ar-top-eyebrow { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; margin:0 0 2px; }
 
-/* ── Form Switcher Trigger ── */
 .ar-form-switcher-btn { display:inline-flex; align-items:center; gap:8px; background:transparent; border:1.5px solid transparent; padding:4px 8px 4px 0; border-radius:8px; cursor:pointer; font-family:'DM Sans',system-ui,sans-serif; max-width:400px; transition:all 0.15s; }
 .ar-form-switcher-btn:hover { background:#f1f5f9; padding:4px 8px; border-color:#e2e8f0; }
 .ar-form-switcher-btn--open { background:#eff6ff; padding:4px 8px; border-color:#bfdbfe; }
@@ -1468,7 +1453,6 @@ const CSS = `
 .ar-form-switcher-chevron { color:#64748b; flex-shrink:0; transition:transform 0.2s; }
 .ar-form-switcher-btn--open .ar-form-switcher-chevron { transform:rotate(180deg); color:#2563eb; }
 
-/* ── Form Search Panel (ar-fsp) ── */
 @keyframes ar-panel-in { from { opacity:0; transform:translateY(-8px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }
 .ar-fsp { position:absolute; top:calc(100% + 6px); left:-8px; z-index:9999; background:#fff; border:1.5px solid #e2e8f0; border-radius:16px; box-shadow:0 20px 60px rgba(15,23,42,0.16), 0 4px 16px rgba(15,23,42,0.06); width:360px; animation:ar-panel-in 0.18s cubic-bezier(0.34,1.2,0.64,1); }
 .ar-fsp-search { display:flex; align-items:center; gap:0; padding:12px 14px; border-bottom:1px solid #f1f5f9; position:relative; }
@@ -1497,7 +1481,6 @@ const CSS = `
 .ar-fsp-item-title { font-size:13px; font-weight:600; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ar-fsp-item-meta { font-size:11px; color:#94a3b8; font-weight:500; }
 
-/* Search-first hint */
 .ar-fsp-hint { display:flex; flex-direction:column; align-items:center; gap:6px; padding:20px 16px 16px; color:#94a3b8; font-size:12px; font-weight:500; }
 .ar-fsp-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px 16px; color:#94a3b8; font-size:12px; font-weight:500; }
 .ar-fsp-footer { display:flex; align-items:center; justify-content:center; gap:2px; padding:8px 14px; border-top:1px solid #f1f5f9; font-size:10px; color:#94a3b8; }

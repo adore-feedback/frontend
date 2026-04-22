@@ -442,7 +442,7 @@ const MobileAnalyticsDrawer = ({ selectedForm, analytics, onClose, onSettings })
   const breakdown      = analytics.sentimentBreakdown || [];
   const positiveCount  = breakdown[0]?.count ?? 0;
   const neutralCount   = breakdown[1]?.count ?? 0;
-  const negativeCount  = breakdown[2]?.count ?? 0;
+  const averageCount  = breakdown[2]?.count ?? 0;
   const avgRating      = analytics.averageRating || selectedForm?.averageRating || null;
 
   if (!selectedForm) return null;
@@ -485,7 +485,7 @@ const MobileAnalyticsDrawer = ({ selectedForm, analytics, onClose, onSettings })
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
             <SentimentBar label="Positive" value={positiveCount} max={totalResponses} color="#10b981" emoji="😊" />
             <SentimentBar label="Neutral"  value={neutralCount}  max={totalResponses} color="#f59e0b" emoji="😐" />
-            <SentimentBar label="Negative" value={negativeCount} max={totalResponses} color="#ef4444" emoji="😞" />
+            <SentimentBar label="Average" value={averageCount} max={totalResponses} color="#8b5cf6" emoji="📊" />
           </div>
         </div>
 
@@ -651,7 +651,7 @@ const AdminDashboard = () => {
   const breakdown      = analytics.sentimentBreakdown || [];
   const positiveCount  = breakdown[0]?.count ?? 0;
   const neutralCount   = breakdown[1]?.count ?? 0;
-  const negativeCount  = breakdown[2]?.count ?? 0;
+  const averageCount  = breakdown[2]?.count ?? 0;
   const liveCount      = forms.filter((f) => f.status === "live").length;
   const draftCount     = forms.filter((f) => f.status === "draft").length;
   const avgRating      = analytics.averageRating || selectedForm?.averageRating || null;
@@ -929,7 +929,7 @@ const AdminDashboard = () => {
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
                     <SentimentBar label="Positive" value={positiveCount} max={totalResponses} color="#10b981" emoji="😊" />
                     <SentimentBar label="Neutral"  value={neutralCount}  max={totalResponses} color="#f59e0b" emoji="😐" />
-                    <SentimentBar label="Negative" value={negativeCount} max={totalResponses} color="#ef4444" emoji="😞" />
+                    <SentimentBar label="Average" value={averageCount} max={totalResponses} color="#8b5cf6" emoji="📊" />
                   </div>
                 </div>
 
