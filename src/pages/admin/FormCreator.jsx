@@ -174,7 +174,7 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
               </svg>
               <span>{id}</span>
             </div>
-            <input className="fc-input fc-person-name" placeholder="Greeting name (e.g. John)" value={p.name || ""} onChange={(e) => update(id, "name", e.target.value)} />
+            <input className="fc-input fc-person-name" placeholder="Greeting name" value={p.name || ""} onChange={(e) => update(id, "name", e.target.value)} />
             <input className="fc-input fc-person-company" placeholder="Pre-fill company name (optional)" value={p.prefillData?.companyName || ""} onChange={(e) => update(id, "prefillData", { ...p.prefillData, companyName: e.target.value })} />
           </div>
         );
@@ -484,22 +484,26 @@ const FormCreator = () => {
 
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
-  const buildContentPayload = () => ({
-    title:                  form.title,
-    displayTitle:           form.showTitleToUser ? (form.displayTitle || form.title) : "",
-    showTitleToUser:        form.showTitleToUser,
-    description:            form.description,
-    formType:               form.formType,
-    collectsName:           form.collectsName,
-    collectsPhone:          form.collectsPhone,
-    phoneRequired:          form.phoneRequired,
-    collectsCompanyDetails: form.collectsCompanyDetails,
-    companyDetailsRequired: form.companyDetailsRequired,
-    personalizations:       form.personalizations,
-    questions: form.questions
-      .filter((q) => q.prompt && q.prompt.trim())
-      .map((q) => ({ ...q, options: splitList(q.optionsText), answerTemplates: splitList(q.answerTemplatesText) })),
-  });
+  // REPLACE WITH
+const buildContentPayload = () => ({
+  title:                  form.title,
+  displayTitle:           form.showTitleToUser ? (form.displayTitle || form.title) : "",
+  showTitleToUser:        form.showTitleToUser,
+  description:            form.description,
+  formType:               form.formType,
+  // Include visibility + respondents so slug is generated correctly on first save
+  visibility:             form.visibility,
+  allowedRespondents:     splitList(form.allowedRespondentsText),
+  collectsName:           form.collectsName,
+  collectsPhone:          form.collectsPhone,
+  phoneRequired:          form.phoneRequired,
+  collectsCompanyDetails: form.collectsCompanyDetails,
+  companyDetailsRequired: form.companyDetailsRequired,
+  personalizations:       form.personalizations,
+  questions: form.questions
+    .filter((q) => q.prompt && q.prompt.trim())
+    .map((q) => ({ ...q, options: splitList(q.optionsText), answerTemplates: splitList(q.answerTemplatesText) })),
+});
 
   // FIX: Convert local datetime strings to ISO before sending to server
   const buildSettingsPayload = (overrideStatus) => ({
@@ -755,7 +759,7 @@ const FormCreator = () => {
                         required
                         value={form.title}
                         onChange={(e) => updateField("title", e.target.value)}
-                        placeholder="e.g. Webinar Feedback — Q1 2025"
+                        placeholder="e.g. Team Name"
                       />
                     </div>
                     <div className="fc-field">

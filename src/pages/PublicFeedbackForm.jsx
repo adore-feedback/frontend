@@ -108,8 +108,7 @@ const StarRating = ({ value, onChange }) => {
         {current > 0 && (
           <span style={{
             fontSize: 13, fontWeight: 700,
-            color: COLORS[current],
-            marginLeft: 8,
+            color: COLORS[current], marginLeft: 8,
             padding: "3px 12px",
             background: `${COLORS[current]}18`,
             borderRadius: 20,
@@ -141,6 +140,89 @@ const Avatar = ({ name, email, size = 40 }) => {
   );
 };
 
+// ─── NEW: Hybrid Multi-Select (checkboxes + free-text textarea) ───────────────
+/**
+ * Respondents can pick from MCQ options AND/OR type their own answer.
+ * Stored as: { selected: string[], customText: string }
+ * Flattened to array on submit: [...selected, customText].filter(Boolean)
+ */
+const HybridMultiSelect = ({ question, value, onChange }) => {
+  const val = (value && typeof value === "object" && !Array.isArray(value))
+    ? value
+    : { selected: Array.isArray(value) ? value : [], customText: "" };
+
+  const toggleOption = (opt) => {
+    const prev = val.selected || [];
+    const next = prev.includes(opt) ? prev.filter((x) => x !== opt) : [...prev, opt];
+    onChange({ ...val, selected: next });
+  };
+
+  const setCustomText = (text) => onChange({ ...val, customText: text });
+  const selectedCount = (val.selected?.length || 0) + (val.customText?.trim() ? 1 : 0);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2, fontWeight: 600 }}>
+        Choose from options below · or write your own answer
+      </div>
+
+      {/* MCQ checkboxes */}
+      {(question.options || []).map((opt) => {
+        const selected = (val.selected || []).includes(opt);
+        return (
+          <label key={opt}
+            style={{ ...S.optionRow, ...(selected ? S.optionRowSelected : {}), cursor: "pointer" }}
+            onClick={() => toggleOption(opt)}>
+            <div style={{
+              width: 19, height: 19, borderRadius: 5, flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s",
+              border: selected ? "2px solid #6366f1" : "2px solid #d1d5db",
+              background: selected ? "#6366f1" : "transparent",
+            }}>
+              {selected && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              )}
+            </div>
+            <input type="checkbox" style={{ display: "none" }} checked={selected} onChange={() => {}} />
+            <span style={{ fontSize: 14, fontWeight: selected ? 600 : 400, color: selected ? "#111827" : "#374151" }}>{opt}</span>
+          </label>
+        );
+      })}
+
+      {/* Or-divider */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
+        <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+        <span style={{
+          fontSize: 10, fontWeight: 700, color: "#9ca3af",
+          textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap",
+          padding: "0 4px",
+        }}>
+          or type your own
+        </span>
+        <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+      </div>
+
+      {/* Free-text fallback */}
+      <textarea
+        className="form-input"
+        style={{ ...S.textarea, minHeight: 80, marginTop: 2 }}
+        placeholder="Add your own answer or additional details…"
+        value={val.customText || ""}
+        onChange={(e) => setCustomText(e.target.value)}
+      />
+
+      {selectedCount > 0 && (
+        <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700 }}>
+          {selectedCount} answer{selectedCount !== 1 ? "s" : ""} provided
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Email Identity Gate ──────────────────────────────────────────────────────
 const EmailIdentityGate = ({ formTitle, savedEmail, savedName, onVerified, isVerifying, error }) => {
   const [email, setEmail] = useState(savedEmail || "");
@@ -162,7 +244,6 @@ const EmailIdentityGate = ({ formTitle, savedEmail, savedName, onVerified, isVer
           <p style={S.gateSubtitle}>
             <strong style={{ color: "#111827" }}>{formTitle || "This form"}</strong> requires verification. Continue with your saved account?
           </p>
-
           <div style={S.identityCard}>
             <Avatar name={savedName} email={savedEmail} size={46} />
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -174,13 +255,10 @@ const EmailIdentityGate = ({ formTitle, savedEmail, savedName, onVerified, isVer
               Saved
             </div>
           </div>
-
           {error && <div style={S.errorBox}><span>⚠️</span> {error} This account may not be on the access list.</div>}
-
           <button type="button" disabled={isVerifying} onClick={() => onVerified({ email: savedEmail, name: savedName })} style={S.primaryBtn} className="primary-btn">
             {isVerifying ? <><span style={S.spinnerEl} /> Verifying…</> : <>Continue as {savedName || savedEmail.split("@")[0]}</>}
           </button>
-
           <button type="button" onClick={() => { setShowManual(true); setEmail(""); setName(""); }} style={S.ghostBtn}>
             Use a different account
           </button>
@@ -212,7 +290,6 @@ const EmailIdentityGate = ({ formTitle, savedEmail, savedName, onVerified, isVer
         <p style={S.gateSubtitle}>
           <strong style={{ color: "#111827" }}>{formTitle || "This form"}</strong> is restricted to invited respondents only.
         </p>
-
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16, textAlign: "left" }}>
           <div style={S.fieldGroup}>
             <label style={S.label}>Your Name</label>
@@ -223,13 +300,10 @@ const EmailIdentityGate = ({ formTitle, savedEmail, savedName, onVerified, isVer
             <input type="email" style={S.input} placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" className="form-input" />
             <span style={S.hint}>Must match the email this form was sent to.</span>
           </div>
-
           {error && <div style={S.errorBox}><span>⚠️</span> {error}</div>}
-
           <button type="submit" disabled={isVerifying || !email.trim()} style={{ ...S.primaryBtn, marginTop: 4, opacity: (isVerifying || !email.trim()) ? 0.55 : 1 }} className="primary-btn">
             {isVerifying ? <><span style={S.spinnerEl} /> Verifying…</> : "Verify & Continue →"}
           </button>
-
           {savedEmail && (
             <button type="button" onClick={() => setShowManual(false)} style={{ background: "none", border: "none", color: "#6366f1", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, textAlign: "center" }}>
               ← Back to saved account
@@ -246,7 +320,7 @@ const EmailIdentityGate = ({ formTitle, savedEmail, savedName, onVerified, isVer
 };
 
 // ─── Status Screens ───────────────────────────────────────────────────────────
-const StatusScreen = ({ icon, iconBg, title, children }) => (
+const StatusScreen = ({ icon, iconBg, children }) => (
   <div style={S.centeredPage}>
     <style>{CSS}</style>
     <div style={S.glassCard}>
@@ -263,10 +337,7 @@ const StatusScreen = ({ icon, iconBg, title, children }) => (
 );
 
 const AccessDeniedScreen = ({ email, onRetry }) => (
-  <StatusScreen
-    iconBg="#fee2e2"
-    icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>}
-  >
+  <StatusScreen iconBg="#fee2e2" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>}>
     <h1 style={{ ...S.gateTitle, color: "#111827" }}>Access Denied</h1>
     <p style={S.gateSubtitle}><strong style={{ color: "#ef4444" }}>{email}</strong> is not on the allowed respondents list for this form.</p>
     <p style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.7, margin: "0 0 24px" }}>Contact the form administrator if you believe this is an error.</p>
@@ -275,20 +346,14 @@ const AccessDeniedScreen = ({ email, onRetry }) => (
 );
 
 const InvalidTokenScreen = ({ message }) => (
-  <StatusScreen
-    iconBg="#fee2e2"
-    icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>}
-  >
+  <StatusScreen iconBg="#fee2e2" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>}>
     <h1 style={{ ...S.gateTitle, color: "#111827" }}>Access Denied</h1>
     <p style={S.gateSubtitle}>{message || "This form requires a personalised invitation link. Please use the link sent to you directly."}</p>
   </StatusScreen>
 );
 
 const AlreadyResponded = ({ formTitle, respondentName, respondentEmail }) => (
-  <StatusScreen
-    iconBg="#fef3c7"
-    icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
-  >
+  <StatusScreen iconBg="#fef3c7" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}>
     <h1 style={{ ...S.gateTitle, color: "#111827" }}>Already Submitted</h1>
     <p style={S.gateSubtitle}>{respondentName ? `Hi ${respondentName.split(" ")[0]}, you've` : "You've"} already submitted a response for <strong style={{ color: "#6366f1" }}>{formTitle}</strong>.</p>
     {respondentEmail && <p style={{ fontSize: 13, color: "#9ca3af", margin: "0 0 8px" }}>Submitted as <strong style={{ color: "#374151" }}>{respondentEmail}</strong></p>}
@@ -297,17 +362,13 @@ const AlreadyResponded = ({ formTitle, respondentName, respondentEmail }) => (
 );
 
 const SessionExpired = ({ onRetry }) => (
-  <StatusScreen
-    iconBg="#fee2e2"
-    icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/></svg>}
-  >
+  <StatusScreen iconBg="#fee2e2" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/></svg>}>
     <h1 style={{ ...S.gateTitle, color: "#111827" }}>Session Expired</h1>
     <p style={S.gateSubtitle}>Your session has timed out. Please reopen your personalised link to continue.</p>
     <button type="button" style={S.primaryBtn} className="primary-btn" onClick={onRetry}>Reload Page</button>
   </StatusScreen>
 );
 
-// ─── Saved Identity Banner ─────────────────────────────────────────────────────
 const SavedIdentityBanner = ({ email, name, onClear }) => (
   <div style={S.identityBanner}>
     <Avatar name={name} email={email} size={36} />
@@ -459,6 +520,16 @@ const PublicFeedbackForm = () => {
   const ratingQ     = useMemo(() => form?.questions?.find((q) => q.type === "rating"), [form]);
   const ratingValue = answers[ratingQ?.id] || null;
 
+  // Flatten hybrid multi-select before submit
+  const flattenAnswer = (q, raw) => {
+    if (q.type === "multiple-choice" && raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const parts = [...(raw.selected || [])];
+      if (raw.customText?.trim()) parts.push(raw.customText.trim());
+      return parts;
+    }
+    return Array.isArray(raw) ? raw : (raw ?? "");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus({ type: "", message: "" });
@@ -471,7 +542,7 @@ const PublicFeedbackForm = () => {
         questionId: q.id,
         prompt:     q.prompt,
         type:       q.type,
-        value:      Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] ?? ""),
+        value:      flattenAnswer(q, answers[q.id]),
       })),
     };
 
@@ -502,7 +573,6 @@ const PublicFeedbackForm = () => {
   const savedAccessForForm = getVerifiedAccess(formId);
   const collectsName = form?.collectsName !== false;
 
-  // ── Render states ──────────────────────────────────────────────────────────
   if (isLoading && gateState !== "verifying")
     return (
       <div style={S.centeredPage}>
@@ -552,19 +622,12 @@ const PublicFeedbackForm = () => {
   if (submitted) {
     const submittedEmail = respondent.email || "";
     return (
-      <StatusScreen
-        iconBg="#d1fae5"
-        icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
-      >
+      <StatusScreen iconBg="#d1fae5" icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}>
         <h1 style={{ ...S.gateTitle, color: "#111827" }}>
           {respondent.name ? `Thank you, ${respondent.name.split(" ")[0]}!` : "Thank you!"}
         </h1>
         <p style={S.gateSubtitle}>Your feedback has been securely recorded.</p>
-        {submittedEmail && (
-          <p style={{ fontSize: 13, color: "#9ca3af", margin: "0 0 8px" }}>
-            Submitted as <strong style={{ color: "#374151" }}>{submittedEmail}</strong>
-          </p>
-        )}
+        {submittedEmail && <p style={{ fontSize: 13, color: "#9ca3af", margin: "0 0 8px" }}>Submitted as <strong style={{ color: "#374151" }}>{submittedEmail}</strong></p>}
         {!submittedEmail && <p style={{ fontSize: 13, color: "#9ca3af", margin: "0 0 8px" }}>You may close this window.</p>}
       </StatusScreen>
     );
@@ -572,11 +635,39 @@ const PublicFeedbackForm = () => {
 
   if (!form) return null;
 
-  // Only show form type badge — no title, no closing time
+  // ── Greeting & display logic ──────────────────────────────────────────────
+
   const FORM_TYPE_ICONS = { webinar: "🎙️", flash: "⚡", survey: "📊", default: "📋" };
   const typeIcon = FORM_TYPE_ICONS[form.formType] || FORM_TYPE_ICONS.default;
   const formTypeLabel = form.formTypeLabel || form.formType || "Feedback";
+
+  const isRestricted = form.visibility === "restricted" || isPersonalizedLink;
   const greetingName = prefillGreeting || "";
+
+  /**
+   * GREETING RULES:
+   * - Restricted + has name → "Hey {firstName}, we'd love your feedback"
+   * - Restricted + no name → "We'd love your feedback"
+   * - Public → "Share your {formTypeLabel} feedback"  (form-type, NOT title)
+   */
+  const greetingText = isRestricted
+    ? (greetingName ? `👋 Hey ${greetingName}, we'd love your feedback` : "We'd love your feedback")
+    : `Share your ${formTypeLabel} feedback`;
+
+  /**
+   * DISPLAY TITLE: Only shown if showTitleToUser is explicitly true.
+   * Uses displayTitle if set; falls back to title.
+   */
+  const showTitle = form.showTitleToUser === true;
+  const displayTitle = showTitle
+    ? (form.displayTitle?.trim() ? form.displayTitle : form.title)
+    : null;
+
+  /**
+   * DESCRIPTION: Only shown if showDescription is not false AND description exists.
+   * Admin sets showDescription=false to hide even when description is filled in.
+   */
+  const showDescription = form.showDescription !== false && Boolean(form.description?.trim());
 
   return (
     <main style={S.main}>
@@ -584,15 +675,12 @@ const PublicFeedbackForm = () => {
 
       {/* ── Hero ── */}
       <header style={S.hero}>
-        {/* Decorative background elements */}
         <div style={S.heroBg} />
         <div style={S.heroOrb1} />
         <div style={S.heroOrb2} />
         <div style={S.heroGrid} />
 
         <div style={S.heroContent}>
-
-          {/* Simtrak Feedback Hub branding — prominent */}
           <div style={S.simtrakBrand}>
             <div style={S.simtrakLogoMark}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -602,27 +690,27 @@ const PublicFeedbackForm = () => {
             <span style={S.simtrakName}>Simtrak Feedback Hub</span>
           </div>
 
-          {/* Form type — the only form metadata shown */}
           <div style={S.typeBadge}>
             <span>{typeIcon}</span>
             <span>{formTypeLabel}</span>
           </div>
 
+          {/* Optional display title */}
+          {displayTitle && <h2 style={S.heroTitle}>{displayTitle}</h2>}
+
           {/* Greeting */}
-          {greetingName && (
-            <p style={S.greeting}>👋 Hey {greetingName}, we'd love your feedback</p>
-          )}
-          {!greetingName && (
-            <p style={S.greeting}>We'd love to hear from you</p>
+          <p style={S.greeting}>{greetingText}</p>
+
+          {/* Optional description */}
+          {showDescription && (
+            <p style={S.heroDescription}>{form.description}</p>
           )}
 
-          {/* Decorative divider with tagline */}
           <div style={S.heroDivider}>
             <div style={S.heroDividerLine} />
             <div style={S.heroDividerLine} />
           </div>
 
-          {/* Trust indicators row */}
           <div style={S.heroTrustRow}>
             <div style={S.heroTrustDot} />
             <div style={S.heroTrustItem}>
@@ -640,14 +728,12 @@ const PublicFeedbackForm = () => {
 
       {/* Body */}
       <div style={S.body}>
-
         {hasSavedIdentity && (
           <SavedIdentityBanner email={savedEmail} name={savedName} onClear={handleClearIdentity} />
         )}
 
         <form style={{ display: "flex", flexDirection: "column", gap: 16 }} onSubmit={handleSubmit}>
 
-          {/* Verified identity chip */}
           {respondent.email && (isPersonalizedLink || gateState === "verified") && (
             <div style={S.verifiedBanner}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round">
@@ -680,27 +766,20 @@ const PublicFeedbackForm = () => {
                     Full Name
                     <span style={{ color: "#9ca3af", fontWeight: 500, marginLeft: 4, fontSize: 10, textTransform: "none" }}>(optional)</span>
                   </label>
-                  <input
-                    style={S.input} placeholder="Your full name" value={respondent.name}
+                  <input style={S.input} placeholder="Your full name" value={respondent.name}
                     onChange={(e) => setRespondent({ ...respondent, name: e.target.value })}
-                    readOnly={isPersonalizedLink}
-                    className="form-input"
-                  />
+                    readOnly={isPersonalizedLink} className="form-input" />
                   {isPersonalizedLink && <span style={S.prefillNote}>✓ Pre-filled from your profile</span>}
                 </div>
               )}
 
               <div style={S.fieldGroup}>
                 <label style={S.label}>Email Address</label>
-                <input
-                  type="email" placeholder="you@example.com" value={respondent.email}
+                <input type="email" placeholder="you@example.com" value={respondent.email}
                   readOnly={isPersonalizedLink || gateState === "verified"}
                   onChange={(e) => { if (!isPersonalizedLink && gateState !== "verified") setRespondent({ ...respondent, email: e.target.value }); }}
                   className="form-input"
-                  style={{
-                    ...S.input,
-                    ...((isPersonalizedLink || gateState === "verified") ? { background: "#f9fafb", color: "#6b7280", cursor: "not-allowed" } : {}),
-                  }}
+                  style={{ ...S.input, ...((isPersonalizedLink || gateState === "verified") ? { background: "#f9fafb", color: "#6b7280", cursor: "not-allowed" } : {}) }}
                 />
                 {isPersonalizedLink && <span style={S.prefillNote}>✓ Verified via your personalised link</span>}
                 {!isPersonalizedLink && gateState === "verified" && <span style={S.prefillNote}>✓ Verified — cannot be changed</span>}
@@ -708,31 +787,20 @@ const PublicFeedbackForm = () => {
 
               {form.collectsPhone && (
                 <div style={S.fieldGroup}>
-                  <label style={S.label}>
-                    Phone {form.phoneRequired && <span style={{ color: "#ef4444" }}>*</span>}
-                  </label>
-                  <input
-                    type="tel" style={S.input} placeholder="+91 98765 43210"
+                  <label style={S.label}>Phone {form.phoneRequired && <span style={{ color: "#ef4444" }}>*</span>}</label>
+                  <input type="tel" style={S.input} placeholder="+91 98765 43210"
                     required={form.phoneRequired} value={respondent.phone}
                     onChange={(e) => setRespondent({ ...respondent, phone: e.target.value })}
-                    className="form-input"
-                  />
+                    className="form-input" />
                 </div>
               )}
 
               {form.collectsCompanyDetails && (
                 <div style={S.fieldGroup}>
-                  <label style={S.label}>
-                    Company / Organisation {form.companyDetailsRequired && <span style={{ color: "#ef4444" }}>*</span>}
-                  </label>
-                  <input
-                    className="form-input"
-                    style={{
-                      ...S.input,
-                      ...((isPersonalizedLink || (gateState === "verified" && Boolean(respondent.companyName))) ? { background: "#f9fafb", color: "#6b7280", cursor: "not-allowed" } : {}),
-                    }}
-                    placeholder="Your organisation"
-                    required={form.companyDetailsRequired}
+                  <label style={S.label}>Company / Organisation {form.companyDetailsRequired && <span style={{ color: "#ef4444" }}>*</span>}</label>
+                  <input className="form-input"
+                    style={{ ...S.input, ...((isPersonalizedLink || (gateState === "verified" && Boolean(respondent.companyName))) ? { background: "#f9fafb", color: "#6b7280", cursor: "not-allowed" } : {}) }}
+                    placeholder="Your organisation" required={form.companyDetailsRequired}
                     value={respondent.companyName}
                     readOnly={isPersonalizedLink || (gateState === "verified" && Boolean(respondent.companyName))}
                     onChange={(e) => { if (!isPersonalizedLink && !(gateState === "verified" && respondent.companyName)) setRespondent({ ...respondent, companyName: e.target.value }); }}
@@ -745,11 +813,9 @@ const PublicFeedbackForm = () => {
 
           {/* Questions */}
           {(form.questions || []).map((q, idx) => (
-            <section
-              key={q.id || idx}
+            <section key={q.id || idx}
               style={{ ...S.card, ...(activeQ === (q.id || idx) ? S.cardActive : {}) }}
-              onClick={() => setActiveQ(q.id || idx)}
-            >
+              onClick={() => setActiveQ(q.id || idx)}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 18 }}>
                 <div style={S.qBadge}>{idx + 1}</div>
                 <label style={S.qLabel}>
@@ -764,13 +830,10 @@ const PublicFeedbackForm = () => {
 
               {q.type === "text" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <textarea
-                    className="form-input"
-                    style={S.textarea} required={q.required}
+                  <textarea className="form-input" style={S.textarea} required={q.required}
                     value={answers[q.id] || ""}
                     onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                    placeholder="Share your thoughts…"
-                  />
+                    placeholder="Share your thoughts…" />
                   {q.answerTemplates?.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>Quick fill:</span>
@@ -799,30 +862,13 @@ const PublicFeedbackForm = () => {
                 </div>
               )}
 
+              {/* UPDATED: Hybrid multi-select — MCQ checkboxes + free-text textarea */}
               {q.type === "multiple-choice" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, fontWeight: 600 }}>Select all that apply</div>
-                  {(q.options || []).map((opt) => {
-                    const currentAnswers = Array.isArray(answers[q.id]) ? answers[q.id] : [];
-                    const selected = currentAnswers.includes(opt);
-                    return (
-                      <label key={opt} style={{ ...S.optionRow, ...(selected ? S.optionRowSelected : {}), cursor: "pointer" }}
-                        onClick={() => {
-                          const prev = Array.isArray(answers[q.id]) ? answers[q.id] : [];
-                          setAnswers({ ...answers, [q.id]: selected ? prev.filter((x) => x !== opt) : [...prev, opt] });
-                        }}>
-                        <div style={{ width: 19, height: 19, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", border: selected ? "2px solid #6366f1" : "2px solid #d1d5db", background: selected ? "#6366f1" : "transparent" }}>
-                          {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-                        </div>
-                        <input type="checkbox" style={{ display: "none" }} checked={selected} onChange={() => {}} />
-                        <span style={{ fontSize: 14, fontWeight: selected ? 600 : 400, color: selected ? "#111827" : "#374151" }}>{opt}</span>
-                      </label>
-                    );
-                  })}
-                  {Array.isArray(answers[q.id]) && answers[q.id].length > 0 && (
-                    <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, marginTop: 2 }}>{answers[q.id].length} selected</div>
-                  )}
-                </div>
+                <HybridMultiSelect
+                  question={q}
+                  value={answers[q.id]}
+                  onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
+                />
               )}
             </section>
           ))}
@@ -841,7 +887,6 @@ const PublicFeedbackForm = () => {
             Submit Feedback
           </button>
 
-          {/* Footer branding */}
           <div style={S.footerBrand}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ color: "#6366f1", flexShrink: 0 }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             <span><strong style={{ color: "#6366f1" }}>Simtrak Feedback Hub</strong> · Responses are private and confidential</span>
@@ -856,110 +901,74 @@ const PublicFeedbackForm = () => {
 const S = {
   main:          { minHeight: "100vh", background: "#f9fafb", fontFamily: "'DM Sans', system-ui, sans-serif", paddingBottom: 80 },
   centeredPage:  { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f9fafb", padding: 20, fontFamily: "'DM Sans', system-ui" },
-
-  // Gate / status card
   glassCard:     { background: "#fff", borderRadius: 20, padding: "44px 40px", textAlign: "center", maxWidth: 440, width: "100%", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05), 0 20px 60px -10px rgba(0,0,0,0.08)", border: "1px solid #f3f4f6" },
   lockBadge:     { width: 56, height: 56, borderRadius: 16, background: "#f0f0fe", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", color: "#6366f1" },
   gateTitle:     { fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 8px", fontFamily: "'DM Sans', system-ui", letterSpacing: "-0.01em" },
   gateSubtitle:  { fontSize: 14, color: "#6b7280", lineHeight: 1.65, margin: "0 0 24px" },
   identityCard:  { display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "#fafafa", border: "1px solid #f3f4f6", borderRadius: 12, marginBottom: 20, textAlign: "left" },
   verifiedChip:  { display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#10b981", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 20, padding: "3px 10px", flexShrink: 0 },
-
-  // Powered by — replaced with highlighted Simtrak brand
-  poweredByBadge: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#9ca3af", margin: "20px 0 0", fontWeight: 500 },
-
-  // Form inputs
+  poweredByBadge:{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#9ca3af", margin: "20px 0 0", fontWeight: 500 },
   fieldGroup:    { display: "flex", flexDirection: "column", gap: 5 },
   label:         { fontSize: 12, fontWeight: 600, color: "#374151", letterSpacing: "0.01em" },
   hint:          { fontSize: 11, color: "#9ca3af", marginTop: 3 },
   input:         { width: "100%", background: "#f9fafb", border: "1.5px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", fontSize: 14, color: "#111827", outline: "none", transition: "all 0.15s", boxSizing: "border-box", fontFamily: "'DM Sans', system-ui" },
   textarea:      { width: "100%", minHeight: 112, background: "#f9fafb", border: "1.5px solid #e5e7eb", borderRadius: 10, padding: "12px 14px", fontSize: 14, color: "#111827", outline: "none", resize: "vertical", fontFamily: "'DM Sans', system-ui", lineHeight: 1.65, boxSizing: "border-box", transition: "all 0.15s" },
   prefillNote:   { fontSize: 11, color: "#10b981", marginTop: 3, fontWeight: 600 },
-
-  // Buttons
   primaryBtn:    { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "14px 20px", background: "#111827", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", transition: "all 0.15s", fontFamily: "'DM Sans', system-ui" },
   ghostBtn:      { width: "100%", background: "none", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 600, color: "#6b7280", cursor: "pointer", fontFamily: "'DM Sans', system-ui", marginTop: 8, transition: "all 0.15s" },
   chip:          { fontSize: 12, fontWeight: 600, color: "#374151", background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 20, padding: "5px 13px", cursor: "pointer", fontFamily: "'DM Sans', system-ui", transition: "all 0.15s" },
-
-  // Error
   errorBox:      { display: "flex", alignItems: "flex-start", gap: 8, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "#dc2626", fontWeight: 600, textAlign: "left" },
   spinnerEl:     { width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.6s linear infinite" },
-
-  // Load
   loadRing:      { width: 36, height: 36, border: "3px solid #e5e7eb", borderTopColor: "#6366f1", borderRadius: "50%", animation: "spin 0.7s linear infinite" },
-
-  // ── Hero ──
+  // Hero
   hero:          { background: "#111827", padding: "48px 24px 52px", position: "relative", overflow: "hidden" },
   heroBg:        { position: "absolute", inset: 0, backgroundImage: "radial-gradient(ellipse at 75% 40%, rgba(99,102,241,0.22) 0%, transparent 55%), radial-gradient(ellipse at 15% 85%, rgba(139,92,246,0.15) 0%, transparent 50%)", pointerEvents: "none" },
   heroOrb1:      { position: "absolute", top: -60, right: -60, width: 240, height: 240, borderRadius: "50%", background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.1)", pointerEvents: "none" },
   heroOrb2:      { position: "absolute", bottom: -40, left: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.08)", pointerEvents: "none" },
   heroGrid:      { position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none" },
   heroContent:   { maxWidth: 680, margin: "0 auto", position: "relative", zIndex: 1 },
-
-  // Simtrak brand in hero
   simtrakBrand:  { display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 20, padding: "6px 14px 6px 10px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 99 },
-  simtrakLogoMark: { width: 26, height: 26, borderRadius: 8, background: "rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", color: "#a5b4fc" },
+  simtrakLogoMark:{ width: 26, height: 26, borderRadius: 8, background: "rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", color: "#a5b4fc" },
   simtrakName:   { fontSize: 12, fontWeight: 700, color: "#a5b4fc", letterSpacing: "0.04em" },
-
-  // Form type badge
   typeBadge:     { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", padding: "6px 16px", borderRadius: 99, marginBottom: 18, letterSpacing: "0.02em" },
-
-  greeting:      { fontSize: 24, fontWeight: 700, color: "#fff", letterSpacing: "-0.02em", lineHeight: 1.3, margin: "0 0 20px" },
-
-  // Decorative divider
+  // Optional display title above greeting
+  heroTitle:     { fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", lineHeight: 1.2, margin: "0 0 10px" },
+  greeting:      { fontSize: 22, fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "-0.01em", lineHeight: 1.35, margin: "0 0 14px" },
+  // Optional description below greeting
+  heroDescription:{ fontSize: 14, color: "rgba(255,255,255,0.5)", lineHeight: 1.65, margin: "0 0 20px", maxWidth: 540 },
   heroDivider:   { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 },
-  heroDividerLine: { flex: 1, height: 1, background: "rgba(255,255,255,0.1)" },
-  heroDividerText: { fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.3)", letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap" },
-
-  // Trust indicators
+  heroDividerLine:{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" },
   heroTrustRow:  { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
   heroTrustItem: { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "rgba(255,255,255,0.45)", fontWeight: 500 },
   heroTrustDot:  { width: 3, height: 3, borderRadius: "50%", background: "rgba(255,255,255,0.2)" },
-
   // Body
   body:          { maxWidth: 680, margin: "0 auto", padding: "24px 20px" },
-
-  // Identity banners
-  identityBanner: { display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#f0fdf4", border: "1px solid #d1fae5", borderRadius: 12, marginBottom: 8 },
-  verifiedBanner: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#f0fdf4", border: "1px solid #d1fae5", borderRadius: 10, fontSize: 13, color: "#065f46", fontWeight: 600 },
-
-  // Cards
+  identityBanner:{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#f0fdf4", border: "1px solid #d1fae5", borderRadius: 12, marginBottom: 8 },
+  verifiedBanner:{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#f0fdf4", border: "1px solid #d1fae5", borderRadius: 10, fontSize: 13, color: "#065f46", fontWeight: 600 },
   card:          { background: "#fff", borderRadius: 14, border: "1px solid #f3f4f6", padding: "22px 24px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", transition: "border-color 0.2s, box-shadow 0.2s" },
   cardActive:    { borderColor: "#c7d2fe", boxShadow: "0 0 0 3px rgba(99,102,241,0.08)" },
-
-  // Section header
   sectionHead:   { display: "flex", alignItems: "center", gap: 10, marginBottom: 18 },
   sectionIcon:   { width: 30, height: 30, borderRadius: 8, background: "#f0f0fe", display: "flex", alignItems: "center", justifyContent: "center", color: "#6366f1", flexShrink: 0 },
   sectionTitle:  { fontSize: 12, fontWeight: 700, color: "#111827", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 },
-
-  // Field grid
   fieldGrid:     { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
-
-  // Question
   qBadge:        { width: 26, height: 26, borderRadius: 8, background: "#111827", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   qLabel:        { fontSize: 15, fontWeight: 600, color: "#111827", lineHeight: 1.5 },
-
-  // Choices
-  optionRow:        { display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 10, border: "1.5px solid #f3f4f6", cursor: "pointer", transition: "all 0.15s", background: "#fafafa", userSelect: "none" },
+  optionRow:     { display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 10, border: "1.5px solid #f3f4f6", cursor: "pointer", transition: "all 0.15s", background: "#fafafa", userSelect: "none" },
   optionRowSelected:{ borderColor: "#c7d2fe", background: "#f0f0fe" },
-  radio:            { width: 18, height: 18, borderRadius: "50%", border: "2px solid #d1d5db", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" },
-  radioSelected:    { border: "2px solid #6366f1", background: "#6366f1" },
-
-  // Footer branding
+  radio:         { width: 18, height: 18, borderRadius: "50%", border: "2px solid #d1d5db", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" },
+  radioSelected: { border: "2px solid #6366f1", background: "#6366f1" },
   footerBrand:   { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#9ca3af", fontWeight: 500, marginTop: 4 },
 };
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 @keyframes spin { to { transform: rotate(360deg); } }
-
 .form-input:focus {
   border-color: #6366f1 !important;
   background: #fff !important;
   box-shadow: 0 0 0 3px rgba(99,102,241,0.1) !important;
   outline: none !important;
 }
-
 .primary-btn:hover:not(:disabled) {
   background: #1f2937 !important;
   transform: translateY(-1px) !important;
@@ -967,60 +976,12 @@ const CSS = `
 }
 .primary-btn:active { transform: translateY(0) !important; }
 .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
 .chip-btn:hover { background: #e5e7eb !important; border-color: #d1d5db !important; }
-
-/* ── Responsive ── */
 @media (max-width: 640px) {
-  /* Hero padding */
-  header[style*="padding: 48px"] {
-    padding: 36px 16px 40px !important;
-  }
-
-  /* Greeting font size */
-  p[style*="fontSize: 24"] {
-    font-size: 20px !important;
-  }
-
-  /* Trust row wraps gracefully — handled by flexWrap already */
-
-  /* Cards */
-  section[style*="padding: 22px 24px"] {
-    padding: 16px !important;
-    border-radius: 10px !important;
-  }
-
-  /* Body padding */
-  div[style*="padding: 24px 20px"] {
-    padding: 16px 12px !important;
-  }
-
-  /* Field grid: single column */
-  div[style*="grid-template-columns: 1fr 1fr"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Gate card padding */
-  div[style*="padding: 44px 40px"] {
-    padding: 32px 20px !important;
-  }
-
-  /* Star rating wraps */
-  div[style*="display: flex"][style*="gap: 6"] {
-    flex-wrap: wrap;
-  }
-}
-
-@media (max-width: 400px) {
-  /* Simtrak brand text */
-  span[style*="fontSize: 12"][style*="fontWeight: 700"][style*="color: #a5b4fc"] {
-    font-size: 11px !important;
-  }
-
-  /* Trust row hides dots on very small screens */
-  div[style*="width: 3"][style*="height: 3"] {
-    display: none !important;
-  }
+  div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  section[style*="padding: 22px 24px"] { padding: 16px !important; }
+  div[style*="padding: 24px 20px"] { padding: 16px 12px !important; }
+  div[style*="padding: 44px 40px"] { padding: 32px 20px !important; }
 }
 `;
 
