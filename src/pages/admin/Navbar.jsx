@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 const NAV_ITEMS = [
   {
@@ -67,7 +68,14 @@ const NAV_ITEMS = [
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
 
   const isActive = (item) =>
     item.exact
@@ -84,7 +92,11 @@ const Navbar = () => {
           </span>
 
           <span className="block text-[11px] font-medium text-gray-500 tracking-wide leading-tight text-center">
-            Powered by <span className="font-semibold text-blue-900"> Simtrak Solutions </span>
+            Powered by{" "}
+            <span className="font-semibold text-blue-900">
+              {" "}
+              Simtrak Solutions{" "}
+            </span>
           </span>
 
           <img
@@ -123,10 +135,111 @@ const Navbar = () => {
         })}
       </nav>
 
+      {/* Show Users link only for super_admin */}
+      {(user?.role === "super_admin" || user?.role === "admin") && (
+        <Link
+          to="/admin/users"
+          onClick={() => setIsOpen(false)}
+          className={`nb-link ${location.pathname === "/admin/users" ? "nb-link--active" : ""}`}
+        >
+          <span
+            className={`nb-link-icon ${location.pathname === "/admin/users" ? "nb-link-icon--active" : ""}`}
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 00-3-3.87" />
+              <path d="M16 3.13a4 4 0 010 7.75" />
+            </svg>
+          </span>
+          <span>Users</span>
+          {location.pathname === "/admin/users" && (
+            <span className="nb-active-dot" />
+          )}
+        </Link>
+      )}
+
       {/* Footer — auth hook preserved for future login */}
       <div className="nb-footer">
-        {/* TODO: Replace with real auth user when authentication is added */}
-        <button type="button" className="nb-signout-btn" aria-label="Sign out">
+        {/* Logged-in user info */}
+        <div
+          style={{
+            padding: "8px 12px 10px",
+            marginBottom: "4px",
+          }}
+        >
+          <p
+            style={{
+              fontSize: "12px",
+              fontWeight: 700,
+              color: "#0f172a",
+              margin: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {user?.name || "User"}
+          </p>
+          <p
+            style={{
+              fontSize: "10px",
+              color: "#94a3b8",
+              margin: "1px 0 0",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {user?.email}
+          </p>
+          <span
+            style={{
+              display: "inline-block",
+              marginTop: "5px",
+              fontSize: "9px",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.07em",
+              padding: "2px 7px",
+              borderRadius: "20px",
+              background:
+                user?.role === "super_admin"
+                  ? "#fef3c7"
+                  : user?.role === "admin"
+                    ? "#ede9fe"
+                    : "#eff6ff",
+              color:
+                user?.role === "super_admin"
+                  ? "#92400e"
+                  : user?.role === "admin"
+                    ? "#5b21b6"
+                    : "#1d4ed8",
+            }}
+          >
+            {user?.role === "super_admin"
+              ? "Super Admin"
+              : user?.role === "admin"
+                ? "Admin"
+                : "Manager"}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="nb-signout-btn"
+          aria-label="Sign out"
+          onClick={handleLogout}
+        >
           <svg
             width="14"
             height="14"

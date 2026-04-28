@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 
-const API = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api$/, '');
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const AuthContext = createContext(null);
 
@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await fetch(`${API}auth/logout`, {
+    await fetch(`${API}/auth/logout`, {
       method: 'POST',
       credentials: 'include',
     });
