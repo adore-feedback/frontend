@@ -33,9 +33,9 @@ export const clearFormAccessToken = (formId) => {
 
 const request = async (path, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: 'include',
     headers: {
       "Content-Type": "application/json",
-      "x-user-id": getUserId(),
       ...options.headers,
     },
     ...options,

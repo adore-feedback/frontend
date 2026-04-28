@@ -9,19 +9,44 @@ import {
 } from "../../api/feedbackApi";
 
 /* ─── helpers ──────────────────────────────────── */
-const DRAFT_KEY     = "simtrak_form_draft";
+const DRAFT_KEY = "simtrak_form_draft";
 const TEMPLATES_KEY = "simtrak_question_templates";
 
 const emptyQuestion = () => ({
-  prompt: "", type: "text", required: false, optionsText: "", answerTemplatesText: "",
+  prompt: "",
+  type: "text",
+  required: false,
+  optionsText: "",
+  answerTemplatesText: "",
 });
 
 const splitList = (v) =>
-  v.split(",").map((s) => s.trim()).filter(Boolean);
+  v
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-const saveDraft  = (data) => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...data, _savedAt: Date.now() })); } catch {} };
-const loadDraft  = ()     => { try { const d = localStorage.getItem(DRAFT_KEY); return d ? JSON.parse(d) : null; } catch { return null; } };
-const clearDraft = ()     => { try { localStorage.removeItem(DRAFT_KEY); } catch {} };
+const saveDraft = (data) => {
+  try {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...data, _savedAt: Date.now() }),
+    );
+  } catch {}
+};
+const loadDraft = () => {
+  try {
+    const d = localStorage.getItem(DRAFT_KEY);
+    return d ? JSON.parse(d) : null;
+  } catch {
+    return null;
+  }
+};
+const clearDraft = () => {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {}
+};
 
 const loadSavedTemplates = () => {
   try {
@@ -29,7 +54,9 @@ const loadSavedTemplates = () => {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return [...parsed].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 };
 
 const saveTemplate = (tpl) => {
@@ -40,7 +67,9 @@ const saveTemplate = (tpl) => {
     const updated = [newEntry, ...filtered];
     localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
     return updated;
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 };
 
 const deleteTemplate = (prompt) => {
@@ -49,7 +78,9 @@ const deleteTemplate = (prompt) => {
     const updated = existing.filter((t) => t.prompt !== prompt);
     localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
     return updated;
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 };
 
 const defaultClosesAt = (formType) => {
@@ -84,84 +115,177 @@ const localDatetimeToISO = (localStr) => {
 };
 
 const formToState = (apiForm) => ({
-  title:                  apiForm.title        || "",
-  displayTitle:           apiForm.displayTitle !== undefined ? apiForm.displayTitle : apiForm.title || "",
-  showTitleToUser:        apiForm.showTitleToUser !== undefined ? apiForm.showTitleToUser : false,
-  description:            apiForm.description  || "",
-  formType:               apiForm.formType     || "",
-  status:                 apiForm.status       || "draft",
-  visibility:             apiForm.visibility   || "public",
+  title: apiForm.title || "",
+  displayTitle:
+    apiForm.displayTitle !== undefined
+      ? apiForm.displayTitle
+      : apiForm.title || "",
+  showTitleToUser:
+    apiForm.showTitleToUser !== undefined ? apiForm.showTitleToUser : false,
+  description: apiForm.description || "",
+  formType: apiForm.formType || "",
+  status: apiForm.status || "draft",
+  visibility: apiForm.visibility || "public",
   allowedRespondentsText: (apiForm.allowedRespondents || []).join(", "),
-  collectsName:           apiForm.collectsName !== undefined ? apiForm.collectsName : true,
-  collectsPhone:          !!apiForm.collectsPhone,
-  phoneRequired:          !!apiForm.phoneRequired,
+  collectsName:
+    apiForm.collectsName !== undefined ? apiForm.collectsName : true,
+  collectsPhone: !!apiForm.collectsPhone,
+  phoneRequired: !!apiForm.phoneRequired,
   collectsCompanyDetails: !!apiForm.collectsCompanyDetails,
   companyDetailsRequired: !!apiForm.companyDetailsRequired,
-  duplicateCheckFields:   apiForm.duplicateCheckFields || ["email"],
+  duplicateCheckFields: apiForm.duplicateCheckFields || ["email"],
   // FIX: convert stored ISO → local datetime string for the input
-  opensAt:    apiForm.availability?.opensAt  ? toLocalDatetimeString(new Date(apiForm.availability.opensAt))  : "",
-  closesAt:   apiForm.availability?.closesAt ? toLocalDatetimeString(new Date(apiForm.availability.closesAt)) : "",
+  opensAt: apiForm.availability?.opensAt
+    ? toLocalDatetimeString(new Date(apiForm.availability.opensAt))
+    : "",
+  closesAt: apiForm.availability?.closesAt
+    ? toLocalDatetimeString(new Date(apiForm.availability.closesAt))
+    : "",
   singleSession: !!apiForm.availability?.singleSession,
-  sessionKey:    apiForm.availability?.sessionKey || "",
+  sessionKey: apiForm.availability?.sessionKey || "",
   questions: (apiForm.questions || []).map((q) => ({
     ...q,
-    optionsText:         (q.options         || []).join(", "),
+    optionsText: (q.options || []).join(", "),
     answerTemplatesText: (q.answerTemplates || []).join(", "),
   })),
   personalizations: apiForm.personalizations || [],
 });
 
 const BUILTIN_QUESTION_TEMPLATES = [
-  { label: "Overall Rating",  prompt: "How would you rate your overall experience?", type: "rating",           required: true,  optionsText: "", answerTemplatesText: "" },
-  { label: "What Worked",     prompt: "What did you like the most?",                type: "text",             required: false, optionsText: "", answerTemplatesText: "The session was useful because...,I liked the presenter because..." },
-  { label: "Improvements",    prompt: "What could be improved?",                   type: "text",             required: false, optionsText: "", answerTemplatesText: "More examples would help,The session was too long" },
-  { label: "Recommend?",      prompt: "Would you recommend this to others?",       type: "single-choice",    required: false, optionsText: "Yes definitely,Probably yes,Not sure,Probably not", answerTemplatesText: "" },
-  { label: "Multi Select",    prompt: "Which topics were most useful?",            type: "multiple-choice",  required: false, optionsText: "Topic A,Topic B,Topic C,Topic D", answerTemplatesText: "" },
+  {
+    label: "Overall Rating",
+    prompt: "How would you rate your overall experience?",
+    type: "rating",
+    required: true,
+    optionsText: "",
+    answerTemplatesText: "",
+  },
+  {
+    label: "What Worked",
+    prompt: "What did you like the most?",
+    type: "text",
+    required: false,
+    optionsText: "",
+    answerTemplatesText:
+      "The session was useful because...,I liked the presenter because...",
+  },
+  {
+    label: "Improvements",
+    prompt: "What could be improved?",
+    type: "text",
+    required: false,
+    optionsText: "",
+    answerTemplatesText: "More examples would help,The session was too long",
+  },
+  {
+    label: "Recommend?",
+    prompt: "Would you recommend this to others?",
+    type: "single-choice",
+    required: false,
+    optionsText: "Yes definitely,Probably yes,Not sure,Probably not",
+    answerTemplatesText: "",
+  },
+  {
+    label: "Multi Select",
+    prompt: "Which topics were most useful?",
+    type: "multiple-choice",
+    required: false,
+    optionsText: "Topic A,Topic B,Topic C,Topic D",
+    answerTemplatesText: "",
+  },
 ];
 
-const QTYPE_ICONS = { text: "✍️", rating: "⭐", "single-choice": "🔘", "multiple-choice": "☑️" };
+const QTYPE_ICONS = {
+  text: "✍️",
+  rating: "⭐",
+  "single-choice": "🔘",
+  "multiple-choice": "☑️",
+};
 
 const INITIAL_FORM = {
-  title: "", displayTitle: "", showTitleToUser: false,
-  description: "", formType: "", status: "draft", visibility: "public",
+  title: "",
+  displayTitle: "",
+  showTitleToUser: false,
+  description: "",
+  formType: "",
+  status: "draft",
+  visibility: "public",
   allowedRespondentsText: "",
   collectsName: true,
-  collectsPhone: true, phoneRequired: false,
-  collectsCompanyDetails: true, companyDetailsRequired: false,
-  duplicateCheckFields: ["email", "phone"], opensAt: "", closesAt: "",
-  singleSession: false, sessionKey: "", questions: [emptyQuestion()], personalizations: [],
+  collectsPhone: true,
+  phoneRequired: false,
+  collectsCompanyDetails: true,
+  companyDetailsRequired: false,
+  duplicateCheckFields: ["email", "phone"],
+  opensAt: "",
+  closesAt: "",
+  singleSession: false,
+  sessionKey: "",
+  questions: [emptyQuestion()],
+  personalizations: [],
 };
 
 /* ─── sub-components ───────────────────────────────── */
 const DraftBanner = ({ draft, onRestore, onDiscard }) => (
   <div className="fc-draft-banner">
     <div className="fc-draft-banner-left">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5" strokeLinecap="round">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#b45309"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      >
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
       </svg>
       <span>
         You have an unsaved draft from{" "}
-        <strong>{new Date(draft._savedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</strong>.
-        Restore it?
+        <strong>
+          {new Date(draft._savedAt).toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </strong>
+        . Restore it?
       </span>
     </div>
     <div className="fc-draft-banner-actions">
-      <button type="button" className="fc-draft-restore" onClick={onRestore}>Restore</button>
-      <button type="button" className="fc-draft-discard" onClick={onDiscard}>Discard</button>
+      <button type="button" className="fc-draft-restore" onClick={onRestore}>
+        Restore
+      </button>
+      <button type="button" className="fc-draft-discard" onClick={onDiscard}>
+        Discard
+      </button>
     </div>
   </div>
 );
 
 const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
-  const getP = (id) => personalizations.find((p) => p.identifier === id) || { identifier: id, name: "", prefillData: {} };
+  const getP = (id) =>
+    personalizations.find((p) => p.identifier === id) || {
+      identifier: id,
+      name: "",
+      prefillData: {},
+    };
   const update = (id, field, value) => {
     const existing = getP(id);
-    const updated  = { ...existing, [field]: value };
-    const rest     = personalizations.filter((p) => p.identifier !== id);
+    const updated = { ...existing, [field]: value };
+    const rest = personalizations.filter((p) => p.identifier !== id);
     onChange([...rest, updated]);
   };
   if (!respondents.length)
-    return <div className="fc-empty-state" style={{ padding: "16px", marginTop: 8 }}><p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Add allowed respondent emails above to configure personalization.</p></div>;
+    return (
+      <div className="fc-empty-state" style={{ padding: "16px", marginTop: 8 }}>
+        <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
+          Add allowed respondent emails above to configure personalization.
+        </p>
+      </div>
+    );
   return (
     <div className="fc-personalization-list">
       {respondents.map((id) => {
@@ -169,13 +293,37 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
         return (
           <div key={id} className="fc-person-row">
             <div className="fc-person-id">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round">
-                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
               </svg>
               <span>{id}</span>
             </div>
-            <input className="fc-input fc-person-name" placeholder="Greeting name" value={p.name || ""} onChange={(e) => update(id, "name", e.target.value)} />
-            <input className="fc-input fc-person-company" placeholder="Pre-fill company name (optional)" value={p.prefillData?.companyName || ""} onChange={(e) => update(id, "prefillData", { ...p.prefillData, companyName: e.target.value })} />
+            <input
+              className="fc-input fc-person-name"
+              placeholder="Greeting name"
+              value={p.name || ""}
+              onChange={(e) => update(id, "name", e.target.value)}
+            />
+            <input
+              className="fc-input fc-person-company"
+              placeholder="Pre-fill company name (optional)"
+              value={p.prefillData?.companyName || ""}
+              onChange={(e) =>
+                update(id, "prefillData", {
+                  ...p.prefillData,
+                  companyName: e.target.value,
+                })
+              }
+            />
           </div>
         );
       })}
@@ -183,11 +331,16 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
   );
 };
 
-const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personalizations }) => {
-  const [copied, setCopied]   = useState("");
-  const [tokens, setTokens]   = useState([]);
+const PersonalizedLinksPanel = ({
+  formId,
+  formSlug,
+  allowedRespondents,
+  personalizations,
+}) => {
+  const [copied, setCopied] = useState("");
+  const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!formId || !allowedRespondents.length) {
@@ -202,11 +355,13 @@ const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personal
     generateInviteTokens(formId, allowedRespondents)
       .then((data) => {
         if (cancelled) return;
-        const origin     = window.location.origin;
+        const origin = window.location.origin;
         const identifier = formSlug || formId;
-        const enriched   = (data.tokens || []).map((t) => ({
+        const enriched = (data.tokens || []).map((t) => ({
           ...t,
-          url: `${origin}/form/${identifier}?token=${t.token}`,
+          url: t.url.startsWith("http")
+            ? t.url
+            : `${origin}${t.url.startsWith("/") ? "" : "/"}${t.url}`,
         }));
         setTokens(enriched);
       })
@@ -217,14 +372,14 @@ const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personal
         if (!cancelled) setLoading(false);
       });
 
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId, formSlug, allowedRespondents.join(",")]);
 
   const copyAll = () => {
-    const text = tokens
-      .map((t) => `${t.name || t.email}: ${t.url}`)
-      .join("\n");
+    const text = tokens.map((t) => `${t.name || t.email}: ${t.url}`).join("\n");
     navigator.clipboard.writeText(text).then(() => {
       setCopied("all");
       setTimeout(() => setCopied(""), 2000);
@@ -236,7 +391,9 @@ const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personal
   return (
     <div className="fc-personalized-links">
       <div className="fc-personalized-links-header">
-        <p className="fc-sub-label" style={{ margin: 0 }}>🔗 Personalized Links</p>
+        <p className="fc-sub-label" style={{ margin: 0 }}>
+          🔗 Personalized Links
+        </p>
         {tokens.length > 0 && (
           <button type="button" className="fc-copy-btn" onClick={copyAll}>
             {copied === "all" ? "✓ Copied All" : "Copy All"}
@@ -244,21 +401,47 @@ const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personal
         )}
       </div>
 
-      <p style={{ fontSize: 12, color: "#64748b", margin: "6px 0 12px", lineHeight: 1.5 }}>
+      <p
+        style={{
+          fontSize: 12,
+          color: "#64748b",
+          margin: "6px 0 12px",
+          lineHeight: 1.5,
+        }}
+      >
         Each link is cryptographically signed for the recipient's email address.
-        Only that person can open and submit — the email cannot be swapped in the URL.
-        Links expire in <strong>7 days</strong>.
+        Only that person can open and submit — the email cannot be swapped in
+        the URL. Links expire in <strong>7 days</strong>.
       </p>
 
       {loading && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", fontSize: 12, color: "#64748b" }}>
-          <span className="fc-spinner" style={{ borderColor: "#cbd5e1", borderTopColor: "#3b82f6", width: 13, height: 13 }} />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 0",
+            fontSize: 12,
+            color: "#64748b",
+          }}
+        >
+          <span
+            className="fc-spinner"
+            style={{
+              borderColor: "#cbd5e1",
+              borderTopColor: "#3b82f6",
+              width: 13,
+              height: 13,
+            }}
+          />
           Generating secure links…
         </div>
       )}
 
       {error && (
-        <div style={{ fontSize: 12, color: "#dc2626", padding: "8px 0" }}>⚠️ {error}</div>
+        <div style={{ fontSize: 12, color: "#dc2626", padding: "8px 0" }}>
+          ⚠️ {error}
+        </div>
       )}
 
       {!loading && !error && tokens.length > 0 && (
@@ -268,8 +451,22 @@ const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents, personal
               <div className="fc-pl-info">
                 <span className="fc-pl-name">{t.name || t.email}</span>
                 <span className="fc-pl-email">{t.email}</span>
+                {t.name && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: "#10b981",
+                      fontWeight: 700,
+                      marginTop: 1,
+                    }}
+                  >
+                    Link personalized for: {t.name}
+                  </span>
+                )}
               </div>
-              <code className="fc-pl-url" title={t.url}>{t.url}</code>
+              <code className="fc-pl-url" title={t.url}>
+                ...?token=•••&for={t.name || t.email.split("@")[0]}
+              </code>
               <button
                 type="button"
                 className="fc-copy-btn"
@@ -295,38 +492,78 @@ const SavedTemplatesPanel = ({ savedTemplates, onUse, onDelete }) => {
 
   if (!savedTemplates.length) return null;
 
-  const sorted = [...savedTemplates].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  const sorted = [...savedTemplates].sort(
+    (a, b) => (b.savedAt || 0) - (a.savedAt || 0),
+  );
 
   return (
     <div className="fc-saved-tpl-wrap">
-      <button type="button" className="fc-saved-tpl-toggle" onClick={() => setOpen((v) => !v)}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round">
+      <button
+        type="button"
+        className="fc-saved-tpl-toggle"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#7c3aed"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        >
           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
           <polyline points="17 21 17 13 7 13 7 21" />
         </svg>
         <span>My Saved Templates</span>
         <span className="fc-saved-tpl-count">{savedTemplates.length}</span>
-        <span style={{ marginLeft: "auto", fontSize: 10, color: "#94a3b8" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, color: "#94a3b8" }}>
+          {open ? "▲" : "▼"}
+        </span>
       </button>
       {open && (
         <div className="fc-saved-tpl-list">
           {sorted.map((t) => (
             <div key={t.prompt} className="fc-saved-tpl-row">
-              <div className="fc-saved-tpl-type-icon">{QTYPE_ICONS[t.type] || "❓"}</div>
+              <div className="fc-saved-tpl-type-icon">
+                {QTYPE_ICONS[t.type] || "❓"}
+              </div>
               <div className="fc-saved-tpl-info">
                 <span className="fc-saved-tpl-prompt">{t.prompt}</span>
                 <span className="fc-saved-tpl-meta">
                   {t.type}
-                  {t.savedAt ? ` · Saved ${new Date(t.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                  {t.savedAt
+                    ? ` · Saved ${new Date(t.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                    : ""}
                   {t.required ? " · Required" : ""}
-                  {t.optionsText ? ` · Options: ${t.optionsText.split(",").length}` : ""}
+                  {t.optionsText
+                    ? ` · Options: ${t.optionsText.split(",").length}`
+                    : ""}
                 </span>
               </div>
-              <button type="button" className="fc-tpl-use-btn" onClick={() => onUse(t)} title="Add this question to the top of the form">
+              <button
+                type="button"
+                className="fc-tpl-use-btn"
+                onClick={() => onUse(t)}
+                title="Add this question to the top of the form"
+              >
                 + Use
               </button>
-              <button type="button" className="fc-tpl-del-btn" onClick={() => onDelete(t.prompt)} title="Delete this template">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <button
+                type="button"
+                className="fc-tpl-del-btn"
+                onClick={() => onDelete(t.prompt)}
+                title="Delete this template"
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
                   <polyline points="3 6 5 6 21 6" />
                   <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
                 </svg>
@@ -339,29 +576,162 @@ const SavedTemplatesPanel = ({ savedTemplates, onUse, onDelete }) => {
   );
 };
 
+const PollOptionsEditor = ({ value, onChange }) => {
+  const options = value
+    ? value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [""];
+
+  const updateOption = (idx, newVal) => {
+    const updated = [...options];
+    updated[idx] = newVal;
+    onChange(updated.join(", "));
+  };
+
+  const addOption = () => {
+    onChange([...options, ""].join(", "));
+  };
+
+  const removeOption = (idx) => {
+    const updated = options.filter((_, i) => i !== idx);
+    onChange(updated.length ? updated.join(", ") : "");
+  };
+
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {options.map((opt, idx) => (
+        <div
+          key={idx}
+          style={{ display: "flex", alignItems: "center", gap: 8 }}
+        >
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              background: "#f1f5f9",
+              border: "1.5px solid #e2e8f0",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#64748b",
+              flexShrink: 0,
+            }}
+          >
+            {letters[idx] || idx + 1}
+          </div>
+          <input
+            className="fc-input"
+            style={{ flex: 1 }}
+            placeholder={`Option ${letters[idx] || idx + 1}`}
+            value={opt}
+            onChange={(e) => updateOption(idx, e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => removeOption(idx)}
+            disabled={options.length === 1}
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 6,
+              background: "transparent",
+              border: "1px solid #e8ecf0",
+              cursor: options.length === 1 ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#ef4444",
+              opacity: options.length === 1 ? 0.3 : 1,
+              flexShrink: 0,
+            }}
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addOption}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          background: "#f8fafc",
+          border: "1.5px dashed #cbd5e1",
+          borderRadius: 9,
+          padding: "7px 14px",
+          fontSize: 12,
+          fontWeight: 600,
+          color: "#64748b",
+          cursor: "pointer",
+          fontFamily: "'DM Sans', system-ui",
+          transition: "all 0.15s",
+          alignSelf: "flex-start",
+        }}
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        Add Option
+      </button>
+    </div>
+  );
+};
+
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
   const { editFormId } = useParams();
   const isEditMode = !!editFormId;
 
-  const [form, setForm]                   = useState(INITIAL_FORM);
-  const [status, setStatus]               = useState({ type: "", message: "", link: "" });
-  const [shareUrl, setShareUrl]           = useState("");
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [status, setStatus] = useState({ type: "", message: "", link: "" });
+  const [shareUrl, setShareUrl] = useState("");
   const [publishedFormId, setPublishedFormId] = useState("");
   const [publishedSlug, setPublishedSlug] = useState("");
-  const [copied, setCopied]               = useState(false);
+  const [copied, setCopied] = useState(false);
   const [activeSection, setActiveSection] = useState("info");
-  const [draftData, setDraftData]         = useState(null);
-  const [isDirty, setIsDirty]             = useState(false);
-  const [isSaving, setIsSaving]           = useState(false);
+  const [draftData, setDraftData] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoadingEdit, setIsLoadingEdit] = useState(isEditMode);
 
-  const [savedFormId, setSavedFormId]     = useState(isEditMode ? editFormId : null);
+  const [savedFormId, setSavedFormId] = useState(
+    isEditMode ? editFormId : null,
+  );
   const [savedFormSlug, setSavedFormSlug] = useState("");
 
-  const [savedTemplates, setSavedTemplates] = useState(() => loadSavedTemplates());
-  const [savingTplIdx, setSavingTplIdx]   = useState(null);
-  const [tplToast, setTplToast]           = useState("");
+  const [savedTemplates, setSavedTemplates] = useState(() =>
+    loadSavedTemplates(),
+  );
+  const [savingTplIdx, setSavingTplIdx] = useState(null);
+  const [tplToast, setTplToast] = useState("");
 
   const autoSaveTimerRef = useRef(null);
 
@@ -370,14 +740,17 @@ const FormCreator = () => {
     const load = async () => {
       setIsLoadingEdit(true);
       try {
-        const data    = await getForm(editFormId);
+        const data = await getForm(editFormId);
         const apiForm = data.form || data;
         setForm(formToState(apiForm));
         setSavedFormId(apiForm._id || apiForm.id || editFormId);
         setSavedFormSlug(apiForm.slug || "");
         clearDraft();
       } catch (err) {
-        setStatus({ type: "error", message: `Could not load form: ${err.message}` });
+        setStatus({
+          type: "error",
+          message: `Could not load form: ${err.message}`,
+        });
       } finally {
         setIsLoadingEdit(false);
       }
@@ -391,34 +764,40 @@ const FormCreator = () => {
     if (d && d._savedAt) setDraftData(d);
   }, [isEditMode]);
 
-  useEffect(() => { setSavedTemplates(loadSavedTemplates()); }, []);
+  useEffect(() => {
+    setSavedTemplates(loadSavedTemplates());
+  }, []);
 
   useEffect(() => {
     if (isEditMode) return;
     if (!form.formType) return;
     if (form.formType === "flash") {
       setForm((c) => {
-        const wasDefault = c.closesAt && c.closesAt === defaultClosesAt("webinar");
+        const wasDefault =
+          c.closesAt && c.closesAt === defaultClosesAt("webinar");
         return wasDefault ? { ...c, closesAt: "" } : c;
       });
     } else if (!form.closesAt) {
       setForm((c) => ({ ...c, closesAt: defaultClosesAt(c.formType) }));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.formType, isEditMode]);
 
   useEffect(() => {
     if (!isDirty) return;
     clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => { saveDraft(form); }, 3000);
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveDraft(form);
+    }, 3000);
     return () => clearTimeout(autoSaveTimerRef.current);
   }, [form, isDirty]);
 
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) => isDirty && currentLocation.pathname !== nextLocation.pathname,
-  );
+  const blocker = { state: "unblocked", proceed: () => {}, reset: () => {} };
   useEffect(() => {
-    if (blocker.state === "blocked") { saveDraft(form); blocker.proceed(); }
+    if (blocker.state === "blocked") {
+      saveDraft(form);
+      blocker.proceed();
+    }
   }, [blocker, form]);
 
   const restoreDraft = () => {
@@ -427,20 +806,43 @@ const FormCreator = () => {
     setDraftData(null);
     setIsDirty(true);
   };
-  const discardDraft = () => { clearDraft(); setDraftData(null); };
+  const discardDraft = () => {
+    clearDraft();
+    setDraftData(null);
+  };
 
-  const updateField    = useCallback((field, value) => { setForm((c) => ({ ...c, [field]: value })); setIsDirty(true); }, []);
+  const updateField = useCallback((field, value) => {
+    setForm((c) => ({ ...c, [field]: value }));
+    setIsDirty(true);
+  }, []);
   const updateQuestion = useCallback((idx, field, value) => {
-    setForm((c) => ({ ...c, questions: c.questions.map((q, i) => i === idx ? { ...q, [field]: value } : q) }));
+    setForm((c) => ({
+      ...c,
+      questions: c.questions.map((q, i) =>
+        i === idx ? { ...q, [field]: value } : q,
+      ),
+    }));
     setIsDirty(true);
   }, []);
 
-  const addQuestion    = () => { setForm((c) => ({ ...c, questions: [...c.questions, emptyQuestion()] })); setIsDirty(true); };
-  const removeQuestion = (idx) => { setForm((c) => ({ ...c, questions: c.questions.filter((_, i) => i !== idx) })); setIsDirty(true); };
+  const addQuestion = () => {
+    setForm((c) => ({ ...c, questions: [...c.questions, emptyQuestion()] }));
+    setIsDirty(true);
+  };
+  const removeQuestion = (idx) => {
+    setForm((c) => ({
+      ...c,
+      questions: c.questions.filter((_, i) => i !== idx),
+    }));
+    setIsDirty(true);
+  };
 
   const addTemplate = (t) => {
     const { label, savedAt, ...rest } = t;
-    setForm((c) => ({ ...c, questions: [{ ...emptyQuestion(), ...rest }, ...c.questions] }));
+    setForm((c) => ({
+      ...c,
+      questions: [{ ...emptyQuestion(), ...rest }, ...c.questions],
+    }));
     setIsDirty(true);
   };
 
@@ -455,27 +857,32 @@ const FormCreator = () => {
     setIsDirty(true);
   };
 
-  const handleSaveAsTemplate = useCallback((idx) => {
-    const q = form.questions[idx];
-    if (!q.prompt.trim()) return;
+  const handleSaveAsTemplate = useCallback(
+    (idx) => {
+      const q = form.questions[idx];
+      if (!q.prompt.trim()) return;
 
-    setSavingTplIdx(idx);
+      setSavingTplIdx(idx);
 
-    const tpl = {
-      prompt:              q.prompt.trim(),
-      type:                q.type,
-      required:            q.required,
-      optionsText:         q.optionsText,
-      answerTemplatesText: q.answerTemplatesText,
-    };
+      const tpl = {
+        prompt: q.prompt.trim(),
+        type: q.type,
+        required: q.required,
+        optionsText: q.optionsText,
+        answerTemplatesText: q.answerTemplatesText,
+      };
 
-    const updated = saveTemplate(tpl);
-    setSavedTemplates(updated);
+      const updated = saveTemplate(tpl);
+      setSavedTemplates(updated);
 
-    setTplToast(`"${q.prompt.trim().slice(0, 40)}${q.prompt.trim().length > 40 ? "…" : ""}" saved as template`);
-    setTimeout(() => setTplToast(""), 3000);
-    setTimeout(() => setSavingTplIdx(null), 1200);
-  }, [form.questions]);
+      setTplToast(
+        `"${q.prompt.trim().slice(0, 40)}${q.prompt.trim().length > 40 ? "…" : ""}" saved as template`,
+      );
+      setTimeout(() => setTplToast(""), 3000);
+      setTimeout(() => setSavingTplIdx(null), 1200);
+    },
+    [form.questions],
+  );
 
   const handleDeleteTemplate = useCallback((prompt) => {
     const updated = deleteTemplate(prompt);
@@ -485,56 +892,66 @@ const FormCreator = () => {
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
   // REPLACE WITH
-const buildContentPayload = () => ({
-  title:                  form.title,
-  displayTitle:           form.showTitleToUser ? (form.displayTitle || form.title) : "",
-  showTitleToUser:        form.showTitleToUser,
-  description:            form.description,
-  formType:               form.formType,
-  // Include visibility + respondents so slug is generated correctly on first save
-  visibility:             form.visibility,
-  allowedRespondents:     splitList(form.allowedRespondentsText),
-  collectsName:           form.collectsName,
-  collectsPhone:          form.collectsPhone,
-  phoneRequired:          form.phoneRequired,
-  collectsCompanyDetails: form.collectsCompanyDetails,
-  companyDetailsRequired: form.companyDetailsRequired,
-  personalizations:       form.personalizations,
-  questions: form.questions
-    .filter((q) => q.prompt && q.prompt.trim())
-    .map((q) => ({ ...q, options: splitList(q.optionsText), answerTemplates: splitList(q.answerTemplatesText) })),
-});
+  const buildContentPayload = () => ({
+    title: form.title,
+    displayTitle: form.showTitleToUser ? form.displayTitle || form.title : "",
+    showTitleToUser: form.showTitleToUser,
+    description: form.description,
+    formType: form.formType,
+    // Include visibility + respondents so slug is generated correctly on first save
+    visibility: form.visibility,
+    allowedRespondents: splitList(form.allowedRespondentsText),
+    collectsName: form.collectsName,
+    collectsPhone: form.collectsPhone,
+    phoneRequired: form.phoneRequired,
+    collectsCompanyDetails: form.collectsCompanyDetails,
+    companyDetailsRequired: form.companyDetailsRequired,
+    personalizations: form.personalizations,
+    questions: form.questions
+      .filter((q) => q.prompt && q.prompt.trim())
+      .map((q) => ({
+        ...q,
+        options: splitList(q.optionsText),
+        answerTemplates: splitList(q.answerTemplatesText),
+      })),
+  });
 
   // FIX: Convert local datetime strings to ISO before sending to server
   const buildSettingsPayload = (overrideStatus) => ({
-    status:               overrideStatus || form.status,
-    visibility:           form.visibility,
+    status: overrideStatus || form.status,
+    visibility: form.visibility,
     allowedRespondents,
-    personalizations:     form.personalizations,
+    personalizations: form.personalizations,
     duplicateCheckFields: form.duplicateCheckFields,
     availability: {
-      opensAt:       localDatetimeToISO(form.opensAt),
-      closesAt:      localDatetimeToISO(form.closesAt),
+      opensAt: localDatetimeToISO(form.opensAt),
+      closesAt: localDatetimeToISO(form.closesAt),
       singleSession: form.singleSession,
-      sessionKey:    form.sessionKey,
+      sessionKey: form.sessionKey,
     },
   });
 
   const saveDraftToServer = async () => {
     if (!form.title?.trim()) {
-      setStatus({ type: "error", message: "Please enter a form title before saving the draft." });
+      setStatus({
+        type: "error",
+        message: "Please enter a form title before saving the draft.",
+      });
       setActiveSection("basics");
       return;
     }
     if (!form.formType) {
-      setStatus({ type: "error", message: "Please select a form type before saving the draft." });
+      setStatus({
+        type: "error",
+        message: "Please select a form type before saving the draft.",
+      });
       setActiveSection("basics");
       return;
     }
     setStatus({ type: "", message: "", link: "" });
     setIsSaving(true);
     try {
-      let fId   = savedFormId;
+      let fId = savedFormId;
       let fSlug = savedFormSlug;
       const contentPayload = buildContentPayload();
 
@@ -543,20 +960,29 @@ const buildContentPayload = () => ({
         fSlug = data.form?.slug || fSlug;
       } else {
         const data = await createForm({ ...contentPayload, status: "draft" });
-        fId    = data.form._id || data.form.id;
-        fSlug  = data.form?.slug || fId;
+        fId = data.form._id || data.form.id;
+        fSlug = data.form?.slug || fId;
         setSavedFormId(fId);
         setSavedFormSlug(fSlug);
       }
-      const settingsData = await updateFormSettings(fId, buildSettingsPayload("draft"));
+      const settingsData = await updateFormSettings(
+        fId,
+        buildSettingsPayload("draft"),
+      );
       fSlug = settingsData.form?.slug || fSlug;
       setSavedFormSlug(fSlug);
 
       clearDraft();
       setIsDirty(false);
-      setStatus({ type: "draft", message: "Draft saved. You can continue editing or publish it later." });
+      setStatus({
+        type: "draft",
+        message: "Draft saved. You can continue editing or publish it later.",
+      });
     } catch (err) {
-      setStatus({ type: "error", message: err.message || "Could not save draft." });
+      setStatus({
+        type: "error",
+        message: err.message || "Could not save draft.",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -565,14 +991,18 @@ const buildContentPayload = () => ({
   const submitForm = async (e) => {
     e.preventDefault();
     if (form.formType === "flash" && !form.closesAt) {
-      setStatus({ type: "error", message: "Flash forms must have a closing time. Please set it in Settings." });
+      setStatus({
+        type: "error",
+        message:
+          "Flash forms must have a closing time. Please set it in Settings.",
+      });
       setActiveSection("settings");
       return;
     }
     setStatus({ type: "", message: "", link: "" });
     setIsSaving(true);
     try {
-      let fId   = savedFormId;
+      let fId = savedFormId;
       let fSlug = savedFormSlug;
       const contentPayload = buildContentPayload();
 
@@ -581,13 +1011,16 @@ const buildContentPayload = () => ({
         fSlug = data.form?.slug || fSlug;
       } else {
         const data = await createForm({ ...contentPayload, status: "draft" });
-        fId    = data.form._id || data.form.id;
-        fSlug  = data.form?.slug || fId;
+        fId = data.form._id || data.form.id;
+        fSlug = data.form?.slug || fId;
         setSavedFormId(fId);
         setSavedFormSlug(fSlug);
       }
 
-      const settingsData = await updateFormSettings(fId, buildSettingsPayload("live"));
+      const settingsData = await updateFormSettings(
+        fId,
+        buildSettingsPayload("live"),
+      );
       fSlug = settingsData.form?.slug || fSlug;
       setSavedFormSlug(fSlug);
 
@@ -595,25 +1028,39 @@ const buildContentPayload = () => ({
       setPublishedSlug(fSlug);
       const origin = window.location.origin;
       setShareUrl(`${origin}/form/${fSlug}`);
-      setStatus({ type: "success", message: "Form published successfully!", link: `/form/${fSlug}` });
+      setStatus({
+        type: "success",
+        message: "Form published successfully!",
+        link: `/form/${fSlug}`,
+      });
       clearDraft();
       setIsDirty(false);
       setActiveSection("done");
     } catch (err) {
-      setStatus({ type: "error", message: err.message || "Could not publish form." });
+      setStatus({
+        type: "error",
+        message: err.message || "Could not publish form.",
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
   const copyLink = useCallback(() => {
-    navigator.clipboard.writeText(shareUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }, [shareUrl]);
 
   const SECTIONS = [
-    { id: "info",      label: "Info",                              icon: "📋" },
-    { id: "settings",  label: "Settings",                          icon: "⚙️" },
-    { id: "questions", label: `Questions (${form.questions.length})`, icon: "❓" },
+    { id: "info", label: "Info", icon: "📋" },
+    { id: "settings", label: "Settings", icon: "⚙️" },
+    {
+      id: "questions",
+      label: `Questions (${form.questions.length})`,
+      icon: "❓",
+    },
   ];
 
   const showLinksInSettings =
@@ -625,9 +1072,28 @@ const buildContentPayload = () => ({
     return (
       <main className="fc-main">
         <style>{CSS}</style>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, gap: 12 }}>
-          <span className="fc-spinner" style={{ width: 28, height: 28, border: "3px solid #e8ecf0", borderTopColor: "#3b82f6" }} />
-          <p style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading form…</p>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 300,
+            gap: 12,
+          }}
+        >
+          <span
+            className="fc-spinner"
+            style={{
+              width: 28,
+              height: 28,
+              border: "3px solid #e8ecf0",
+              borderTopColor: "#3b82f6",
+            }}
+          />
+          <p style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>
+            Loading form…
+          </p>
         </div>
       </main>
     );
@@ -638,7 +1104,15 @@ const buildContentPayload = () => ({
 
       {tplToast && (
         <div className="fc-tpl-toast">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
             <polyline points="20 6 9 17 4 12" />
           </svg>
           {tplToast}
@@ -648,36 +1122,96 @@ const buildContentPayload = () => ({
       <main className="fc-main">
         <div className="fc-wrap">
           {!isEditMode && draftData && (
-            <DraftBanner draft={draftData} onRestore={restoreDraft} onDiscard={discardDraft} />
+            <DraftBanner
+              draft={draftData}
+              onRestore={restoreDraft}
+              onDiscard={discardDraft}
+            />
           )}
 
           {/* Header */}
           <div className="fc-header">
             <div>
               <Link to="/admin" className="fc-back-link">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
                 Back to Dashboard
               </Link>
-              <h1 className="fc-page-title">{isEditMode ? "✏️ Edit Form" : "Create New Form"}</h1>
+              <h1 className="fc-page-title">
+                {isEditMode ? "✏️ Edit Form" : "Create New Form"}
+              </h1>
               {isEditMode && (
-                <p style={{ fontSize: 12, color: "#94a3b8", margin: "4px 0 0", fontWeight: 500 }}>
-                  Picking up where you left off — changes auto-save to your draft.
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "#94a3b8",
+                    margin: "4px 0 0",
+                    fontWeight: 500,
+                  }}
+                >
+                  Picking up where you left off — changes auto-save to your
+                  draft.
                 </p>
               )}
             </div>
             {activeSection !== "done" && (
               <div className="fc-header-actions">
                 {isDirty && (
-                  <button type="button" className="fc-save-draft-btn" onClick={saveDraftToServer} disabled={isSaving}>
-                    {isSaving ? <><span className="fc-spinner" /> Saving…</> : (
-                      <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /></svg> Save Draft</>
+                  <button
+                    type="button"
+                    className="fc-save-draft-btn"
+                    onClick={saveDraftToServer}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <span className="fc-spinner" /> Saving…
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                        >
+                          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                          <polyline points="17 21 17 13 7 13 7 21" />
+                        </svg>{" "}
+                        Save Draft
+                      </>
                     )}
                   </button>
                 )}
-                <button form="creator-form" type="submit" className="fc-publish-btn" disabled={isSaving}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                <button
+                  form="creator-form"
+                  type="submit"
+                  className="fc-publish-btn"
+                  disabled={isSaving}
+                >
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
                   Publish
                 </button>
               </div>
@@ -687,8 +1221,17 @@ const buildContentPayload = () => ({
           {/* Status banners */}
           {status.type === "draft" && (
             <div className="fc-status fc-status--draft">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#92400e"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
               </svg>
               {status.message}
             </div>
@@ -697,7 +1240,9 @@ const buildContentPayload = () => ({
           {status.type === "error" && activeSection !== "done" && (
             <div className="fc-status fc-status--error">
               <span>❌</span>
-              <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>{status.message}</p>
+              <p style={{ fontWeight: 600, fontSize: 13, margin: 0 }}>
+                {status.message}
+              </p>
             </div>
           )}
 
@@ -705,22 +1250,37 @@ const buildContentPayload = () => ({
             <div className="fc-status fc-status--success">
               <span>✅</span>
               <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: 700, fontSize: 14, margin: "0 0 8px" }}>{status.message}</p>
+                <p style={{ fontWeight: 700, fontSize: 14, margin: "0 0 8px" }}>
+                  {status.message}
+                </p>
                 {shareUrl && (
                   <div className="fc-share-row">
                     <code className="fc-share-code">{shareUrl}</code>
-                    <button type="button" className="fc-copy-btn" onClick={copyLink}>{copied ? "✓ Copied" : "Copy"}</button>
-                    <Link to={status.link} target="_blank" className="fc-open-btn">Open ↗</Link>
+                    <button
+                      type="button"
+                      className="fc-copy-btn"
+                      onClick={copyLink}
+                    >
+                      {copied ? "✓ Copied" : "Copy"}
+                    </button>
+                    <Link
+                      to={status.link}
+                      target="_blank"
+                      className="fc-open-btn"
+                    >
+                      Open ↗
+                    </Link>
                   </div>
                 )}
-                {form.visibility === "restricted" && allowedRespondents.length > 0 && (
-                  <PersonalizedLinksPanel
-                    formId={publishedFormId}
-                    formSlug={publishedSlug}
-                    allowedRespondents={allowedRespondents}
-                    personalizations={form.personalizations}
-                  />
-                )}
+                {form.visibility === "restricted" &&
+                  allowedRespondents.length > 0 && (
+                    <PersonalizedLinksPanel
+                      formId={publishedFormId}
+                      formSlug={publishedSlug}
+                      allowedRespondents={allowedRespondents}
+                      personalizations={form.personalizations}
+                    />
+                  )}
               </div>
             </div>
           )}
@@ -729,8 +1289,12 @@ const buildContentPayload = () => ({
           {activeSection !== "done" && (
             <div className="fc-step-nav">
               {SECTIONS.map((s) => (
-                <button key={s.id} type="button" onClick={() => setActiveSection(s.id)}
-                  className={`fc-step-btn ${activeSection === s.id ? "fc-step-btn--active" : ""}`}>
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setActiveSection(s.id)}
+                  className={`fc-step-btn ${activeSection === s.id ? "fc-step-btn--active" : ""}`}
+                >
                   <span className="fc-step-icon">{s.icon}</span>
                   {s.label}
                 </button>
@@ -740,19 +1304,23 @@ const buildContentPayload = () => ({
 
           {activeSection !== "done" && (
             <form id="creator-form" onSubmit={submitForm}>
-
               {/* ── Section: General Info ── */}
               {activeSection === "info" && (
                 <div className="fc-section">
                   <div className="fc-section-header">
                     <h2 className="fc-section-title">General Information</h2>
-                    <p className="fc-section-desc">Set up the basic details for your form</p>
+                    <p className="fc-section-desc">
+                      Set up the basic details for your form
+                    </p>
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
                       <label className="fc-label">
                         Internal Form Title <span className="fc-req">*</span>
-                        <span className="fc-hint"> (for your reference only)</span>
+                        <span className="fc-hint">
+                          {" "}
+                          (for your reference only)
+                        </span>
                       </label>
                       <input
                         className="fc-input"
@@ -763,8 +1331,17 @@ const buildContentPayload = () => ({
                       />
                     </div>
                     <div className="fc-field">
-                      <label className="fc-label">Form Type <span className="fc-req">*</span></label>
-                      <select className="fc-input" required value={form.formType} onChange={(e) => updateField("formType", e.target.value)}>
+                      <label className="fc-label">
+                        Form Type <span className="fc-req">*</span>
+                      </label>
+                      <select
+                        className="fc-input"
+                        required
+                        value={form.formType}
+                        onChange={(e) =>
+                          updateField("formType", e.target.value)
+                        }
+                      >
                         <option value="">Select a type…</option>
                         <option value="webinar">🎙️ Webinar Form</option>
                         <option value="flash">⚡ Flash Form</option>
@@ -777,7 +1354,12 @@ const buildContentPayload = () => ({
                     <div className="fc-field fc-field--full">
                       <div className="fc-toggle-row">
                         <div className="fc-toggle-info">
-                          <span className="fc-label" style={{ marginBottom: 0 }}>Show Title to Respondent</span>
+                          <span
+                            className="fc-label"
+                            style={{ marginBottom: 0 }}
+                          >
+                            Show Title to Respondent
+                          </span>
                           <span className="fc-toggle-desc">
                             {form.showTitleToUser
                               ? "Respondents will see the display title on the form header."
@@ -787,7 +1369,12 @@ const buildContentPayload = () => ({
                         <button
                           type="button"
                           className={`fc-toggle-btn ${form.showTitleToUser ? "fc-toggle-btn--on" : ""}`}
-                          onClick={() => updateField("showTitleToUser", !form.showTitleToUser)}
+                          onClick={() =>
+                            updateField(
+                              "showTitleToUser",
+                              !form.showTitleToUser,
+                            )
+                          }
                         >
                           <span className="fc-toggle-thumb" />
                         </button>
@@ -798,20 +1385,36 @@ const buildContentPayload = () => ({
                     {form.showTitleToUser && (
                       <div className="fc-field fc-field--full">
                         <label className="fc-label">
-                          Display Title <span className="fc-hint">(what respondents see — leave blank to use internal title)</span>
+                          Display Title{" "}
+                          <span className="fc-hint">
+                            (what respondents see — leave blank to use internal
+                            title)
+                          </span>
                         </label>
                         <input
                           className="fc-input"
                           value={form.displayTitle}
-                          onChange={(e) => updateField("displayTitle", e.target.value)}
-                          placeholder={form.title || "Shown to respondents on the form header"}
+                          onChange={(e) =>
+                            updateField("displayTitle", e.target.value)
+                          }
+                          placeholder={
+                            form.title ||
+                            "Shown to respondents on the form header"
+                          }
                         />
                       </div>
                     )}
 
                     <div className="fc-field fc-field--full">
                       <label className="fc-label">Description</label>
-                      <textarea className="fc-input fc-textarea" value={form.description} onChange={(e) => updateField("description", e.target.value)} placeholder="Briefly describe the purpose of this form…" />
+                      <textarea
+                        className="fc-input fc-textarea"
+                        value={form.description}
+                        onChange={(e) =>
+                          updateField("description", e.target.value)
+                        }
+                        placeholder="Briefly describe the purpose of this form…"
+                      />
                     </div>
                   </div>
 
@@ -821,32 +1424,65 @@ const buildContentPayload = () => ({
                   {/* FIX: collectsName chip — now clearly labelled and functional */}
                   <div className="fc-chip-row">
                     {[
-                      ["collectsName",           "👤 Collect Name"],
-                      ["collectsPhone",          "📱 Collect Phone"],
-                      ["phoneRequired",          "🔒 Phone Required"],
+                      ["collectsName", "👤 Collect Name"],
+                      ["collectsPhone", "📱 Collect Phone"],
+                      ["phoneRequired", "🔒 Phone Required"],
                       ["collectsCompanyDetails", "🏢 Company Details"],
-                      ["singleSession",          "🔐 Single Session"],
+                      ["singleSession", "🔐 Single Session"],
                     ].map(([key, lbl]) => (
-                      <button type="button" key={key} onClick={() => updateField(key, !form[key])}
-                        className={`fc-chip ${form[key] ? "fc-chip--on" : ""}`}>{lbl}</button>
+                      <button
+                        type="button"
+                        key={key}
+                        onClick={() => updateField(key, !form[key])}
+                        className={`fc-chip ${form[key] ? "fc-chip--on" : ""}`}
+                      >
+                        {lbl}
+                      </button>
                     ))}
                   </div>
 
                   {/* Info notes */}
                   {!form.collectsName && (
                     <div className="fc-info-note" style={{ marginTop: 10 }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#2563eb"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
                       </svg>
-                      <span>Name field will be hidden from respondents. Responses will appear as "Anonymous".</span>
+                      <span>
+                        Name field will be hidden from respondents. Responses
+                        will appear as "Anonymous".
+                      </span>
                     </div>
                   )}
 
                   <div className="fc-nav-row">
                     <span />
-                    <button type="button" className="fc-next-btn" onClick={() => setActiveSection("settings")}>
+                    <button
+                      type="button"
+                      className="fc-next-btn"
+                      onClick={() => setActiveSection("settings")}
+                    >
                       Next: Settings
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -857,12 +1493,18 @@ const buildContentPayload = () => ({
                 <div className="fc-section">
                   <div className="fc-section-header">
                     <h2 className="fc-section-title">Form Settings</h2>
-                    <p className="fc-section-desc">Configure availability, access, and restrictions</p>
+                    <p className="fc-section-desc">
+                      Configure availability, access, and restrictions
+                    </p>
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
                       <label className="fc-label">Initial Status</label>
-                      <select className="fc-input" value={form.status} onChange={(e) => updateField("status", e.target.value)}>
+                      <select
+                        className="fc-input"
+                        value={form.status}
+                        onChange={(e) => updateField("status", e.target.value)}
+                      >
                         <option value="draft">Draft</option>
                         <option value="live">Live</option>
                         <option value="closed">Closed</option>
@@ -870,7 +1512,13 @@ const buildContentPayload = () => ({
                     </div>
                     <div className="fc-field">
                       <label className="fc-label">Visibility</label>
-                      <select className="fc-input" value={form.visibility} onChange={(e) => updateField("visibility", e.target.value)}>
+                      <select
+                        className="fc-input"
+                        value={form.visibility}
+                        onChange={(e) =>
+                          updateField("visibility", e.target.value)
+                        }
+                      >
                         <option value="public">🌐 Public Link</option>
                         <option value="restricted">🔒 Restricted Users</option>
                       </select>
@@ -878,7 +1526,10 @@ const buildContentPayload = () => ({
 
                     {/* FIX: datetime-local inputs now store local time directly — no UTC shift */}
                     <div className="fc-field">
-                      <label className="fc-label">Opens At <span className="fc-hint">(your local time)</span></label>
+                      <label className="fc-label">
+                        Opens At{" "}
+                        <span className="fc-hint">(your local time)</span>
+                      </label>
                       <input
                         className="fc-input"
                         type="datetime-local"
@@ -889,27 +1540,57 @@ const buildContentPayload = () => ({
                     <div className="fc-field">
                       <label className="fc-label">
                         Closes At{" "}
-                        {form.formType === "flash"
-                          ? <span className="fc-req">* required for flash</span>
-                          : <span className="fc-hint">(defaults to 5 days · your local time)</span>}
+                        {form.formType === "flash" ? (
+                          <span className="fc-req">* required for flash</span>
+                        ) : (
+                          <span className="fc-hint">
+                            (defaults to 5 days · your local time)
+                          </span>
+                        )}
                       </label>
                       <input
                         className="fc-input"
                         type="datetime-local"
                         required={form.formType === "flash"}
                         value={form.closesAt}
-                        onChange={(e) => updateField("closesAt", e.target.value)}
+                        onChange={(e) =>
+                          updateField("closesAt", e.target.value)
+                        }
                       />
                       {form.formType === "flash" && !form.closesAt && (
-                        <span style={{ fontSize: 10, color: "#ef4444", marginTop: 2, display: "block" }}>
-                          ⚡ Flash forms require a closing time before publishing.
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: "#ef4444",
+                            marginTop: 2,
+                            display: "block",
+                          }}
+                        >
+                          ⚡ Flash forms require a closing time before
+                          publishing.
                         </span>
                       )}
                     </div>
                     {form.visibility === "restricted" && (
                       <div className="fc-field fc-field--full">
-                        <label className="fc-label">Allowed Respondents <span className="fc-hint">(comma-separated emails)</span></label>
-                        <textarea className="fc-input fc-textarea" style={{ height: 68 }} placeholder="user1@example.com, user2@example.com" value={form.allowedRespondentsText} onChange={(e) => updateField("allowedRespondentsText", e.target.value)} />
+                        <label className="fc-label">
+                          Allowed Respondents{" "}
+                          <span className="fc-hint">
+                            (comma-separated emails)
+                          </span>
+                        </label>
+                        <textarea
+                          className="fc-input fc-textarea"
+                          style={{ height: 68 }}
+                          placeholder="user1@example.com, user2@example.com"
+                          value={form.allowedRespondentsText}
+                          onChange={(e) =>
+                            updateField(
+                              "allowedRespondentsText",
+                              e.target.value,
+                            )
+                          }
+                        />
                       </div>
                     )}
                   </div>
@@ -918,26 +1599,48 @@ const buildContentPayload = () => ({
                     <>
                       <div className="fc-divider" />
                       <div className="fc-personalization-header">
-                        <p className="fc-sub-label" style={{ margin: 0 }}>Personalization</p>
+                        <p className="fc-sub-label" style={{ margin: 0 }}>
+                          Personalization
+                        </p>
                         <span className="fc-badge-info">Restricted only</span>
                       </div>
-                      <p className="fc-personalization-hint">Pre-fill greeting names and company details per respondent.</p>
-                      <PersonalizationEditor respondents={allowedRespondents} personalizations={form.personalizations} onChange={(v) => updateField("personalizations", v)} />
+                      <p className="fc-personalization-hint">
+                        Pre-fill greeting names and company details per
+                        respondent.
+                      </p>
+                      <PersonalizationEditor
+                        respondents={allowedRespondents}
+                        personalizations={form.personalizations}
+                        onChange={(v) => updateField("personalizations", v)}
+                      />
                     </>
                   )}
 
                   <div className="fc-divider" />
-                  <p className="fc-sub-label">Duplicate Submission Prevention</p>
+                  <p className="fc-sub-label">
+                    Duplicate Submission Prevention
+                  </p>
                   <div className="fc-chip-row">
-                    {[["email", "📧 Email"], ["phone", "📱 Phone"], ["uniqueId", "🆔 Unique ID"]].map(([f, lbl]) => {
+                    {[
+                      ["email", "📧 Email"],
+                      ["phone", "📱 Phone"],
+                      ["uniqueId", "🆔 Unique ID"],
+                    ].map(([f, lbl]) => {
                       const on = form.duplicateCheckFields.includes(f);
                       return (
-                        <button type="button" key={f}
+                        <button
+                          type="button"
+                          key={f}
                           onClick={() => {
-                            const fields = on ? form.duplicateCheckFields.filter((x) => x !== f) : [...form.duplicateCheckFields, f];
+                            const fields = on
+                              ? form.duplicateCheckFields.filter((x) => x !== f)
+                              : [...form.duplicateCheckFields, f];
                             updateField("duplicateCheckFields", fields);
                           }}
-                          className={`fc-chip ${on ? "fc-chip--on" : ""}`}>{lbl}</button>
+                          className={`fc-chip ${on ? "fc-chip--on" : ""}`}
+                        >
+                          {lbl}
+                        </button>
                       );
                     })}
                   </div>
@@ -951,27 +1654,74 @@ const buildContentPayload = () => ({
                         allowedRespondents={allowedRespondents}
                         personalizations={form.personalizations}
                       />
-                      {isDirty && <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 8, fontStyle: "italic" }}>⚠️ You have unsaved changes — save the draft to refresh the links.</p>}
+                      {isDirty && (
+                        <p
+                          style={{
+                            fontSize: 11,
+                            color: "#94a3b8",
+                            marginTop: 8,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          ⚠️ You have unsaved changes — save the draft to
+                          refresh the links.
+                        </p>
+                      )}
                     </>
                   )}
 
-                  {form.visibility === "restricted" && allowedRespondents.length > 0 && !savedFormId && (
-                    <>
-                      <div className="fc-divider" />
-                      <div className="fc-links-prompt">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round">
-                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                        <span>Save the draft first to generate secure personalized links for your respondents.</span>
-                      </div>
-                    </>
-                  )}
+                  {form.visibility === "restricted" &&
+                    allowedRespondents.length > 0 &&
+                    !savedFormId && (
+                      <>
+                        <div className="fc-divider" />
+                        <div className="fc-links-prompt">
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#3b82f6"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                          </svg>
+                          <span>
+                            Save the draft first to generate secure personalized
+                            links for your respondents.
+                          </span>
+                        </div>
+                      </>
+                    )}
 
                   <div className="fc-nav-row">
-                    <button type="button" className="fc-ghost-btn" onClick={() => setActiveSection("info")}>← Back</button>
-                    <button type="button" className="fc-next-btn" onClick={() => setActiveSection("questions")}>
+                    <button
+                      type="button"
+                      className="fc-ghost-btn"
+                      onClick={() => setActiveSection("info")}
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="button"
+                      className="fc-next-btn"
+                      onClick={() => setActiveSection("questions")}
+                    >
                       Next: Questions
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -983,10 +1733,28 @@ const buildContentPayload = () => ({
                   <div className="fc-section-header">
                     <div>
                       <h2 className="fc-section-title">Form Questions</h2>
-                      <p className="fc-section-desc">{form.questions.length} question{form.questions.length !== 1 ? "s" : ""} added</p>
+                      <p className="fc-section-desc">
+                        {form.questions.length} question
+                        {form.questions.length !== 1 ? "s" : ""} added
+                      </p>
                     </div>
-                    <button type="button" className="fc-add-q-btn" onClick={addQuestion}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    <button
+                      type="button"
+                      className="fc-add-q-btn"
+                      onClick={addQuestion}
+                    >
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
                       Add Question
                     </button>
                   </div>
@@ -1000,7 +1768,14 @@ const buildContentPayload = () => ({
                   <div className="fc-template-row">
                     <span className="fc-template-label">Quick add:</span>
                     {BUILTIN_QUESTION_TEMPLATES.map((t) => (
-                      <button key={t.label} type="button" className="fc-template-chip" onClick={() => addTemplate(t)}>+ {t.label}</button>
+                      <button
+                        key={t.label}
+                        type="button"
+                        className="fc-template-chip"
+                        onClick={() => addTemplate(t)}
+                      >
+                        + {t.label}
+                      </button>
                     ))}
                   </div>
 
@@ -1010,77 +1785,226 @@ const buildContentPayload = () => ({
                         <div className="fc-q-head">
                           <div className="fc-q-meta">
                             <span className="fc-q-num">{idx + 1}</span>
-                            <span style={{ fontSize: 15 }}>{QTYPE_ICONS[q.type] || "❓"}</span>
+                            <span style={{ fontSize: 15 }}>
+                              {QTYPE_ICONS[q.type] || "❓"}
+                            </span>
                             <span className="fc-q-type-label">{q.type}</span>
                           </div>
                           <div className="fc-q-controls">
-                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, -1)} disabled={idx === 0} title="Move up">↑</button>
-                            <button type="button" className="fc-q-icon-btn" onClick={() => moveQuestion(idx, 1)} disabled={idx === form.questions.length - 1} title="Move down">↓</button>
+                            <button
+                              type="button"
+                              className="fc-q-icon-btn"
+                              onClick={() => moveQuestion(idx, -1)}
+                              disabled={idx === 0}
+                              title="Move up"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              className="fc-q-icon-btn"
+                              onClick={() => moveQuestion(idx, 1)}
+                              disabled={idx === form.questions.length - 1}
+                              title="Move down"
+                            >
+                              ↓
+                            </button>
                             <button
                               type="button"
                               className={`fc-save-tpl-btn ${savingTplIdx === idx ? "fc-save-tpl-btn--saved" : ""}`}
-                              title={q.prompt.trim() ? "Save as reusable template" : "Enter a prompt first"}
+                              title={
+                                q.prompt.trim()
+                                  ? "Save as reusable template"
+                                  : "Enter a prompt first"
+                              }
                               onClick={() => handleSaveAsTemplate(idx)}
                               disabled={!q.prompt.trim()}
                             >
                               {savingTplIdx === idx ? (
-                                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg> Saved!</>
+                                <>
+                                  <svg
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>{" "}
+                                  Saved!
+                                </>
                               ) : (
-                                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /></svg> Save as Template</>
+                                <>
+                                  <svg
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                  >
+                                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                                    <polyline points="17 21 17 13 7 13 7 21" />
+                                  </svg>{" "}
+                                  Save as Template
+                                </>
                               )}
                             </button>
-                            <button type="button" className="fc-q-icon-btn fc-q-icon-btn--danger" onClick={() => removeQuestion(idx)} title="Remove question">✕</button>
+                            <button
+                              type="button"
+                              className="fc-q-icon-btn fc-q-icon-btn--danger"
+                              onClick={() => removeQuestion(idx)}
+                              title="Remove question"
+                            >
+                              ✕
+                            </button>
                           </div>
                         </div>
                         <div className="fc-q-body">
                           <div className="fc-q-prompt-wrap">
-                            <label className="fc-label">Question Prompt <span className="fc-req">*</span></label>
-                            <input className="fc-input" required value={q.prompt} onChange={(e) => updateQuestion(idx, "prompt", e.target.value)} placeholder="Enter your question here…" />
+                            <label className="fc-label">
+                              Question Prompt <span className="fc-req">*</span>
+                            </label>
+                            <input
+                              className="fc-input"
+                              required
+                              value={q.prompt}
+                              onChange={(e) =>
+                                updateQuestion(idx, "prompt", e.target.value)
+                              }
+                              placeholder="Enter your question here…"
+                            />
                           </div>
                           <div className="fc-q-type-wrap">
                             <label className="fc-label">Response Type</label>
-                            <select className="fc-input" value={q.type} onChange={(e) => updateQuestion(idx, "type", e.target.value)}>
+                            <select
+                              className="fc-input"
+                              value={q.type}
+                              onChange={(e) =>
+                                updateQuestion(idx, "type", e.target.value)
+                              }
+                            >
                               <option value="text">✍️ Text Answer</option>
                               <option value="rating">⭐ Star Rating</option>
-                              <option value="single-choice">🔘 Single Choice</option>
-                              <option value="multiple-choice">☑️ Multiple Choice</option>
+                              <option value="single-choice">
+                                🔘 Single Choice
+                              </option>
+                              <option value="multiple-choice">
+                                ☑️ Multiple Choice
+                              </option>
                             </select>
                           </div>
                         </div>
-                        {(q.type === "single-choice" || q.type === "multiple-choice") && (
+                        {(q.type === "single-choice" ||
+                          q.type === "multiple-choice") && (
                           <div style={{ marginTop: 10 }}>
-                            <label className="fc-label">
-                              Options <span className="fc-hint">(comma-separated)</span>
+                            <label
+                              className="fc-label"
+                              style={{ marginBottom: 8, display: "block" }}
+                            >
+                              Options
                               {q.type === "multiple-choice" && (
-                                <span className="fc-badge-multi">Multi-select enabled</span>
+                                <span className="fc-badge-multi">
+                                  Multi-select enabled
+                                </span>
                               )}
                             </label>
-                            <input className="fc-input" placeholder="Yes, No, Maybe, Not sure" value={q.optionsText} onChange={(e) => updateQuestion(idx, "optionsText", e.target.value)} />
+                            <PollOptionsEditor
+                              value={q.optionsText}
+                              onChange={(val) =>
+                                updateQuestion(idx, "optionsText", val)
+                              }
+                            />
                           </div>
                         )}
                         <div style={{ marginTop: 10 }}>
-                          <label className="fc-label">Suggested Answer Templates <span className="fc-hint">(comma-separated)</span></label>
-                          <textarea className="fc-input fc-textarea" style={{ height: 52 }} placeholder="Great session!, The speaker was excellent…" value={q.answerTemplatesText} onChange={(e) => updateQuestion(idx, "answerTemplatesText", e.target.value)} />
+                          <label className="fc-label">
+                            Suggested Answer Templates{" "}
+                            <span className="fc-hint">(comma-separated)</span>
+                          </label>
+                          <textarea
+                            className="fc-input fc-textarea"
+                            style={{ height: 52 }}
+                            placeholder="Great session!, The speaker was excellent…"
+                            value={q.answerTemplatesText}
+                            onChange={(e) =>
+                              updateQuestion(
+                                idx,
+                                "answerTemplatesText",
+                                e.target.value,
+                              )
+                            }
+                          />
                         </div>
                         <div className="fc-q-required">
-                          <input type="checkbox" id={`req-${idx}`} checked={q.required} onChange={(e) => updateQuestion(idx, "required", e.target.checked)} style={{ width: 14, height: 14, accentColor: "#3b82f6" }} />
-                          <label htmlFor={`req-${idx}`} className="fc-label" style={{ cursor: "pointer", margin: 0 }}>Mandatory</label>
+                          <input
+                            type="checkbox"
+                            id={`req-${idx}`}
+                            checked={q.required}
+                            onChange={(e) =>
+                              updateQuestion(idx, "required", e.target.checked)
+                            }
+                            style={{
+                              width: 14,
+                              height: 14,
+                              accentColor: "#3b82f6",
+                            }}
+                          />
+                          <label
+                            htmlFor={`req-${idx}`}
+                            className="fc-label"
+                            style={{ cursor: "pointer", margin: 0 }}
+                          >
+                            Mandatory
+                          </label>
                         </div>
                       </div>
                     ))}
                     {form.questions.length === 0 && (
                       <div className="fc-empty-q">
                         <span style={{ fontSize: 36 }}>❓</span>
-                        <p>No questions yet. Add one or use a template above.</p>
+                        <p>
+                          No questions yet. Add one or use a template above.
+                        </p>
                       </div>
                     )}
                   </div>
 
                   <div className="fc-nav-row">
-                    <button type="button" className="fc-ghost-btn" onClick={() => setActiveSection("settings")}>← Back</button>
-                    <button type="submit" className="fc-submit-btn" disabled={isSaving}>
-                      {isSaving ? <><span className="fc-spinner" /> Publishing…</> : (
-                        <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>{" "}Save &amp; Publish</>
+                    <button
+                      type="button"
+                      className="fc-ghost-btn"
+                      onClick={() => setActiveSection("settings")}
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="fc-submit-btn"
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <>
+                          <span className="fc-spinner" /> Publishing…
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>{" "}
+                          Save &amp; Publish
+                        </>
                       )}
                     </button>
                   </div>
