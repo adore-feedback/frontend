@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
 const ROLE_LABELS = {
   manager: { label: 'Manager', bg: '#eff6ff', color: '#1d4ed8' },
@@ -74,7 +74,7 @@ const UserManagement = () => {
 
   // Can the current user edit this target user?
   const canEdit = (targetUser) => {
-    const isSelf = targetUser._id === currentUser?.id;
+    const isSelf = targetUser._id === currentUser?.id || targetUser._id?.toString() === currentUser?.id;
     if (isSelf) return false;
     if (isSuperAdmin) return true;
     if (isAdmin && targetUser.role !== 'super_admin') return true;
