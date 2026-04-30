@@ -236,6 +236,8 @@ const RegisterPage = () => {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -324,15 +326,38 @@ const RegisterPage = () => {
             <div className="adore-row">
               <div className="adore-field">
                 <label className="adore-label">Password</label>
-                <input
-                  type="password"
-                  name="password"
-                  value={form.password}
-                  onChange={handleChange}
-                  placeholder="Min. 6 chars"
-                  required
-                  className="adore-input"
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={form.password}
+                    onChange={handleChange}
+                    placeholder="Min. 6 chars"
+                    required
+                    className="adore-input"
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((p) => !p)}
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      color: "var(--muted)",
+                      fontSize: 15,
+                      lineHeight: 1,
+                    }}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
                 {form.password && (
                   <div className="adore-strength">
                     <div
@@ -348,23 +373,46 @@ const RegisterPage = () => {
 
               <div className="adore-field">
                 <label className="adore-label">Confirm</label>
-                <input
-                  type="password"
-                  name="confirm"
-                  value={form.confirm}
-                  onChange={handleChange}
-                  placeholder="Re-enter"
-                  required
-                  className="adore-input"
-                  style={{
-                    borderColor:
-                      form.confirm && form.confirm !== form.password
-                        ? "#c0392b"
-                        : form.confirm && form.confirm === form.password
-                          ? "#27ae60"
-                          : undefined,
-                  }}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    name="confirm"
+                    value={form.confirm}
+                    onChange={handleChange}
+                    placeholder="Re-enter"
+                    required
+                    className="adore-input"
+                    style={{
+                      paddingRight: 40,
+                      borderColor:
+                        form.confirm && form.confirm !== form.password
+                          ? "#c0392b"
+                          : form.confirm && form.confirm === form.password
+                            ? "#27ae60"
+                            : undefined,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm((p) => !p)}
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      color: "var(--muted)",
+                      fontSize: 15,
+                      lineHeight: 1,
+                    }}
+                    tabIndex={-1}
+                  >
+                    {showConfirm ? "🙈" : "👁️"}
+                  </button>
+                </div>
               </div>
             </div>
 

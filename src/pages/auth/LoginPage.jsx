@@ -204,6 +204,7 @@ const LoginPage = () => {
   const justRegistered = location.state?.registered;
 
   const [form, setForm] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -277,16 +278,54 @@ const LoginPage = () => {
             </div>
 
             <div className="adore-field">
-              <label className="adore-label">Password</label>
-              <input
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                required
-                className="adore-input"
-              />
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <label className="adore-label">Password</label>
+                <Link
+                  to="/forgot-password"
+                  className="adore-link"
+                  style={{ fontSize: ".75rem" }}
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <div style={{ position: "relative" }}>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  required
+                  className="adore-input"
+                  style={{ paddingRight: 40 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  style={{
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    color: "var(--muted)",
+                    fontSize: 15,
+                    lineHeight: 1,
+                  }}
+                  tabIndex={-1}
+                >
+                  {showPassword ? "🙈" : "👁️"}
+                </button>
+              </div>
             </div>
 
             {error && <p className="adore-error">{error}</p>}

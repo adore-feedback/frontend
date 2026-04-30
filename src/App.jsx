@@ -9,6 +9,8 @@ import RegisterPage from "./pages/auth/RegisterPage";
 import UnauthorizedPage from "./pages/auth/UnauthorizedPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UserManagement from "./pages/admin/UserManagement";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 
 const AdminLayout = () => {
   return (
@@ -29,6 +31,8 @@ const App = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/form/:formId" element={<PublicFeedbackForm />} />
 
         {/* ── Redirect root to /admin ── */}
