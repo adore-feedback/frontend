@@ -410,21 +410,33 @@ const AdminResult = () => {
     const wb = XLSX.utils.book_new();
     const formTitle = currentForm.title || "Form";
 
-    // Sheet 1: Overview
-    const overviewRows = [
-      ["Form Title", formTitle],
-      ["Form Type", currentForm.formType || ""],
-      ["Status", isDeletedForm ? "Deleted" : currentForm.status || ""],
-      ["Total Responses", analytics.totalResponses || 0],
-      ["Average Rating", analytics.averageRating ?? "N/A"],
-      ["Completion Rate (%)", analytics.completionRate ?? "N/A"],
-      ["Exported At", new Date().toLocaleString()],
+    // ── Sheet 1: Overview (horizontal — headers in Row 1) ──────────────────
+    const overviewHeaders = [
+      "Form Title",
+      "Form Type",
+      "Status",
+      "Total Responses",
+      "Average Rating",
+      "Completion Rate (%)",
+      "Exported At",
     ];
-    const wsOverview = XLSX.utils.aoa_to_sheet(overviewRows);
-    wsOverview["!cols"] = [{ wch: 22 }, { wch: 40 }];
+    const overviewValues = [
+      formTitle,
+      currentForm.formType || "",
+      isDeletedForm ? "Deleted" : currentForm.status || "",
+      analytics.totalResponses || 0,
+      analytics.averageRating ?? "N/A",
+      analytics.completionRate ?? "N/A",
+      new Date().toLocaleString(),
+    ];
+    const wsOverview = XLSX.utils.aoa_to_sheet([
+      overviewHeaders,
+      overviewValues,
+    ]);
+    wsOverview["!cols"] = overviewHeaders.map(() => ({ wch: 22 }));
     XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
 
-    // Sheet 2: Sentiment Breakdown
+    // ── Sheet 2: Sentiment Breakdown ───────────────────────────────────────
     const wsSentiment = XLSX.utils.aoa_to_sheet([
       ["Sentiment", "Count", "Percentage (%)"],
       ...(analytics.sentimentBreakdown || []).map((s) => [
@@ -436,7 +448,7 @@ const AdminResult = () => {
     wsSentiment["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsSentiment, "Sentiment");
 
-    // Sheet 3: Top Keywords
+    // ── Sheet 3: Top Keywords ──────────────────────────────────────────────
     const wsKeywords = XLSX.utils.aoa_to_sheet([
       ["Keyword", "Count"],
       ...(analytics.topKeywords || []).map((k) => [k.keyword, k.count]),
@@ -444,44 +456,85 @@ const AdminResult = () => {
     wsKeywords["!cols"] = [{ wch: 20 }, { wch: 10 }];
     XLSX.utils.book_append_sheet(wb, wsKeywords, "Top Keywords");
 
-    // Sheet 4: All Responses
-    const wsResponses = XLSX.utils.aoa_to_sheet([
-      [
-        "#",
-        "Name",
-        "Email",
-        "Company / Role",
-        "Rating",
-        "Sentiment",
-        "Submitted At",
-        "Answers",
-      ],
-      ...(analytics.recentResponses || []).map((r, i) => [
+    // ── Sheet 4: Responses — each question gets its own column ─────────────
+    const responses = analytics.recentResponses || [];
+
+    // Collect all unique question prompts in order
+    const allPrompts = [];
+    responses.forEach((r) => {
+      (r.answers || []).forEach((a) => {
+        const prompt = a.prompt || a.questionId || "Question";
+        if (!allPrompts.includes(prompt)) allPrompts.push(prompt);
+      });
+    });
+
+    // Build header row
+    const respHeaders = [
+      "#",
+      "Name",
+      "Email",
+      "Phone",
+      "Company",
+      "Rating",
+      "Sentiment",
+      "Submitted At",
+      ...allPrompts,
+    ];
+
+    // Build data rows
+    const respRows = responses.map((r, i) => {
+      // Map answers by prompt for easy lookup
+      const answerMap = {};
+      (r.answers || []).forEach((a) => {
+        const key = a.prompt || a.questionId || "Question";
+        const val = Array.isArray(a.value)
+          ? a.value.join(", ")
+          : (a.value ?? "");
+        answerMap[key] = val;
+      });
+
+      return [
         i + 1,
         r.respondentName || "Anonymous",
         r.respondentEmail || "",
+        r.respondentPhone || "",
         r.respondentRole || "",
         r.rating ?? "",
         r.sentimentLabel || r.sentiment || "",
         r.submittedAt ? new Date(r.submittedAt).toLocaleString() : "",
-        (r.answers || [])
-          .map(
-            (a) =>
-              `${a.prompt || a.questionId}: ${Array.isArray(a.value) ? a.value.join(", ") : a.value}`,
-          )
-          .join(" | "),
-      ]),
-    ]);
-    wsResponses["!cols"] = [
+        ...allPrompts.map((p) => answerMap[p] ?? ""),
+      ];
+    });
+
+    const wsResponses = XLSX.utils.aoa_to_sheet([respHeaders, ...respRows]);
+
+    // Column widths — fixed cols + question cols
+    const fixedWidths = [
       { wch: 4 },
       { wch: 22 },
       { wch: 28 },
+      { wch: 14 },
       { wch: 20 },
       { wch: 8 },
       { wch: 12 },
-      { wch: 20 },
-      { wch: 60 },
+      { wch: 22 },
     ];
+    wsResponses["!cols"] = [
+      ...fixedWidths,
+      ...allPrompts.map(() => ({ wch: 35 })),
+    ];
+
+    // Enable text wrap for answer columns
+    const range = XLSX.utils.decode_range(wsResponses["!ref"] || "A1");
+    for (let R = 1; R <= range.e.r; R++) {
+      for (let C = 8; C < respHeaders.length; C++) {
+        const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
+        if (wsResponses[cellAddr]) {
+          wsResponses[cellAddr].s = { alignment: { wrapText: true } };
+        }
+      }
+    }
+
     XLSX.utils.book_append_sheet(wb, wsResponses, "Responses");
 
     const safeTitle = formTitle.replace(/[^a-z0-9]/gi, "_").slice(0, 40);
@@ -807,7 +860,7 @@ const AdminResult = () => {
                   </div>
 
                   <div className="ar-fsp-footer">
-                    <kbd className="ar-fsp-kbd">↑↓</kbd> navigate &nbsp;·&nbsp;{" "}
+                    <kbd className="ar-fsp-kbd">tab</kbd> navigate &nbsp;·&nbsp;{" "}
                     <kbd className="ar-fsp-kbd">↵</kbd> select &nbsp;·&nbsp;{" "}
                     <kbd className="ar-fsp-kbd">Esc</kbd> close
                   </div>

@@ -30,6 +30,12 @@ const STATUS_META = {
     bg: "rgba(107,114,128,0.12)",
     text: "#374151",
   },
+  archived: {
+    label: "Archived",
+    color: "#9c432a",
+    bg: "rgba(124,58,237,0.10)",
+    text: "#8d3934",
+  },
   deleted: {
     label: "Deleted",
     color: "#7c3aed",
@@ -349,15 +355,22 @@ const DeleteModal = ({ form, onConfirm, onCancel, isDeleting, error }) => (
           <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
         </svg>
       </div>
-      <h3 style={S.modalTitle}>Delete this form?</h3>
+      <h3 style={S.modalTitle}>Archive this form?</h3>
       <p style={S.modalDesc}>
-        You are about to delete{" "}
-        <strong style={{ color: "#0f172a" }}>"{form?.title}"</strong>. The form
-        will be removed from the dashboard, but{" "}
-        <strong style={{ color: "#0f172a" }}>
-          all responses are permanently preserved
-        </strong>{" "}
-        and remain accessible in results.
+        You are about to archive{" "}
+        <strong style={{ color: "#0f172a" }}>"{form?.title}"</strong>.{" "}
+        {(form?.responseCount || 0) > 0 ? (
+          <>
+            This form has responses, so it will be{" "}
+            <strong style={{ color: "#7c3aed" }}>archived</strong> — removed
+            from the dashboard but all responses preserved.
+          </>
+        ) : (
+          <>
+            This form has no responses, so it will be{" "}
+            <strong style={{ color: "#dc2626" }}>permanently deleted</strong>.
+          </>
+        )}
       </p>
       {error && <p style={S.modalError}>{error}</p>}
       <div style={S.modalActions}>
@@ -1348,17 +1361,21 @@ const AdminDashboard = () => {
     setIsDeleting(true);
     setDeleteError("");
     try {
-      if (!hasResponses) {
-        await deleteForm(id);
-        await permanentDeleteForm(id);
-        setForms((prev) => prev.filter((f) => getFormId(f) !== id));
-      } else {
-        await deleteForm(id);
+      if (hasResponses) {
+        // Has responses → Archive (soft, status = "archived")
+        await updateFormSettings(id, { status: "archived" });
         setForms((prev) =>
           prev.map((f) =>
-            getFormId(f) === id ? { ...f, status: "deleted" } : f,
+            getFormId(f) === id ? { ...f, status: "archived" } : f,
           ),
         );
+      } else {
+        // No responses → Permanently delete
+        await deleteForm(id);
+        try {
+          await permanentDeleteForm(id);
+        } catch {}
+        setForms((prev) => prev.filter((f) => getFormId(f) !== id));
       }
       setSelectedFormId((prev) => {
         if (prev !== id) return prev;
@@ -1367,7 +1384,7 @@ const AdminDashboard = () => {
       });
       setPendingDelete(null);
     } catch (err) {
-      setDeleteError(err?.message || "Could not delete. Please try again.");
+      setDeleteError(err?.message || "Could not archive. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -1454,8 +1471,10 @@ const AdminDashboard = () => {
   const filteredForms = useMemo(
     () =>
       forms.filter((f) => {
-        if (filterStatus === "deleted") return f.status === "deleted";
-        if (filterStatus === "all") return f.status !== "deleted";
+        if (filterStatus === "archived")
+          return f.status === "archived" || f.status === "deleted";
+        if (filterStatus === "all")
+          return f.status !== "archived" && f.status !== "deleted";
         return f.status === filterStatus;
       }),
     [forms, filterStatus],
@@ -1685,7 +1704,7 @@ const AdminDashboard = () => {
               </div>
 
               <div style={S.filterTabs} className="filter-tabs-scroll">
-                {["all", "live", "draft", "closed", "deleted"].map((s) => (
+                {["all", "live", "draft", "closed", "archived"].map((s) => (
                   <button
                     key={s}
                     onClick={() => setFilterStatus(s)}
@@ -1695,9 +1714,11 @@ const AdminDashboard = () => {
                     }}
                   >
                     {s.charAt(0).toUpperCase() + s.slice(1)}
-                    {s === "deleted" &&
-                      forms.filter((f) => f.status === "deleted").length >
-                        0 && (
+                    {s === "archived" &&
+                      forms.filter(
+                        (f) =>
+                          f.status === "archived" || f.status === "deleted",
+                      ).length > 0 && (
                         <span
                           style={{
                             marginLeft: 5,
@@ -1709,7 +1730,13 @@ const AdminDashboard = () => {
                             fontWeight: 800,
                           }}
                         >
-                          {forms.filter((f) => f.status === "deleted").length}
+                          {
+                            forms.filter(
+                              (f) =>
+                                f.status === "archived" ||
+                                f.status === "deleted",
+                            ).length
+                          }
                         </span>
                       )}
                   </button>
@@ -1783,7 +1810,8 @@ const AdminDashboard = () => {
                       const sm = STATUS_META[form.status] || STATUS_META.draft;
                       const isSelected = selectedFormId === id;
                       const isHovered = hoveredRow === id;
-                      const isDeleted = form.status === "deleted";
+                      const isDeleted =
+                        form.status === "deleted" || form.status === "archived";
 
                       return (
                         <tr
@@ -1915,22 +1943,22 @@ const AdminDashboard = () => {
                                 Results
                               </Link>
 
-                              {!isDeleted && (
+                              {!isDeleted && form.status !== "archived" && (
                                 <button
                                   onClick={(e) => requestDelete(e, form)}
                                   style={S.actionDelete}
                                 >
-                                  Delete
+                                  Archive
                                 </button>
                               )}
-
-                              {isDeleted && (
+                              {(form.status === "archived" ||
+                                form.status === "deleted") && (
                                 <button
                                   onClick={(e) =>
                                     requestPermanentDelete(e, form)
                                   }
                                   style={S.actionPermanentDelete}
-                                  title="Permanently erase this form"
+                                  title="Permanently erase this archived form"
                                 >
                                   🗑️ Erase
                                 </button>
@@ -1945,7 +1973,7 @@ const AdminDashboard = () => {
               </table>
             </div>
 
-            {filterStatus === "deleted" && filteredForms.length > 0 && (
+            {filterStatus === "archived" && filteredForms.length > 0 && (
               <div
                 style={{
                   padding: "10px 20px 14px",
@@ -1972,9 +2000,8 @@ const AdminDashboard = () => {
                 <span
                   style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}
                 >
-                  Forms with responses are kept for records. Use{" "}
-                  <strong style={{ color: "#7c3aed" }}>🗑️ Erase</strong> to
-                  permanently remove forms with no responses.
+                  Archived forms are preserved with all their responses. Forms
+                  with no responses are permanently deleted automatically.
                 </span>
               </div>
             )}
@@ -1984,6 +2011,51 @@ const AdminDashboard = () => {
           <div style={S.sidebar} className="sidebar">
             {selectedForm ? (
               <>
+                {selectedForm.status === "live" && (
+                  <div style={S.shareBox}>
+                    <p
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        marginBottom: 6,
+                      }}
+                    >
+                      Share Link
+                    </p>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <code
+                        style={{
+                          flex: 1,
+                          fontSize: 10,
+                          color: "#3b82f6",
+                          background: "#eff6ff",
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        /form/{selectedForm.slug || getFormId(selectedForm)}
+                      </code>
+                      <button
+                        onClick={() =>
+                          navigator.clipboard?.writeText(
+                            `${window.location.origin}/form/${selectedForm.slug || getFormId(selectedForm)}`,
+                          )
+                        }
+                        style={S.copyBtn}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div style={S.sideCard}>
                   {selectedForm.imageUrl && (
                     <div
@@ -2234,52 +2306,6 @@ const AdminDashboard = () => {
                     <path d="M5 12h14M12 5l7 7-7 7" />
                   </svg>
                 </Link>
-
-                {selectedForm.status === "live" && (
-                  <div style={S.shareBox}>
-                    <p
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "#64748b",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        marginBottom: 6,
-                      }}
-                    >
-                      Share Link
-                    </p>
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <code
-                        style={{
-                          flex: 1,
-                          fontSize: 10,
-                          color: "#3b82f6",
-                          background: "#eff6ff",
-                          padding: "6px 10px",
-                          borderRadius: 6,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        /form/{selectedForm.slug || getFormId(selectedForm)}
-                      </code>
-                      <button
-                        onClick={() =>
-                          navigator.clipboard?.writeText(
-                            `${window.location.origin}/form/${selectedForm.slug || getFormId(selectedForm)}`,
-                          )
-                        }
-                        style={S.copyBtn}
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                )}
               </>
             ) : (
               <div style={S.sideCard}>

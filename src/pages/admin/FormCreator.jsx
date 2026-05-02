@@ -217,7 +217,7 @@ const INITIAL_FORM = {
   collectsCompanyDetails: true,
   companyDetailsRequired: false,
   duplicateCheckFields: ["email", "phone"],
-  opensAt: "",
+  opensAt: toLocalDatetimeString(new Date()),
   closesAt: "",
   singleSession: false,
   sessionKey: "",
@@ -705,6 +705,586 @@ const PollOptionsEditor = ({ value, onChange }) => {
   );
 };
 
+/* ─── Custom DateTime Picker ─────────────────────────────────────────────── */
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+const DateTimePicker = ({ value, onChange, label, hint, required }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  const parsed = value
+    ? new Date(value.length === 16 ? value + ":00" : value)
+    : null;
+  const isValid = parsed && !isNaN(parsed.getTime());
+
+  const [viewYear, setViewYear] = useState(() =>
+    isValid ? parsed.getFullYear() : new Date().getFullYear(),
+  );
+  const [viewMonth, setViewMonth] = useState(() =>
+    isValid ? parsed.getMonth() : new Date().getMonth(),
+  );
+  const [selDate, setSelDate] = useState(() =>
+    isValid ? parsed.getDate() : null,
+  );
+  const [selHour, setSelHour] = useState(() =>
+    isValid ? parsed.getHours() : new Date().getHours(),
+  );
+  const [selMin, setSelMin] = useState(() =>
+    isValid ? parsed.getMinutes() : Math.floor(new Date().getMinutes() / 5) * 5,
+  );
+
+  useEffect(() => {
+    if (!value) return;
+    const d = new Date(value.length === 16 ? value + ":00" : value);
+    if (!isNaN(d.getTime())) {
+      setViewYear(d.getFullYear());
+      setViewMonth(d.getMonth());
+      setSelDate(d.getDate());
+      setSelHour(d.getHours());
+      setSelMin(d.getMinutes());
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const today = new Date();
+
+  const commit = (date, hour, min) => {
+    if (!date) return;
+    const d = new Date(viewYear, viewMonth, date, hour, min);
+    const pad = (n) => String(n).padStart(2, "0");
+    onChange(
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    );
+  };
+
+  const selectDate = (day) => {
+    setSelDate(day);
+    commit(day, selHour, selMin);
+  };
+
+  const displayVal = isValid
+    ? `${selDate} ${MONTHS[viewMonth]} ${viewYear}  ${String(selHour).padStart(2, "0")}:${String(selMin).padStart(2, "0")}`
+    : "";
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      {label && (
+        <div style={{ marginBottom: 5 }}>
+          <label
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#94a3b8",
+              textTransform: "uppercase",
+              letterSpacing: "0.07em",
+            }}
+          >
+            {label}
+            {required && (
+              <span style={{ color: "#ef4444", marginLeft: 2 }}>*</span>
+            )}
+          </label>
+          {hint && (
+            <p
+              style={{
+                fontSize: 10,
+                color: "#cbd5e1",
+                margin: "1px 0 0",
+                fontWeight: 500,
+              }}
+            >
+              {hint}
+            </p>
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: "#f8fafc",
+          border: `1.5px solid ${open ? "#3b82f6" : "#e8ecf0"}`,
+          borderRadius: 9,
+          padding: "9px 12px",
+          cursor: "pointer",
+          fontSize: 13,
+          color: displayVal ? "#0f172a" : "#94a3b8",
+          fontFamily: "'DM Sans', system-ui",
+          textAlign: "left",
+          boxShadow: open ? "0 0 0 3px rgba(59,130,246,0.1)" : "none",
+          transition: "all 0.15s",
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={open ? "#3b82f6" : "#94a3b8"}
+          strokeWidth="2"
+          strokeLinecap="round"
+        >
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        <span style={{ flex: 1 }}>{displayVal || "Select date & time…"}</span>
+        {displayVal && (
+          <span
+            role="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange("");
+              setSelDate(null);
+            }}
+            style={{
+              fontSize: 16,
+              color: "#94a3b8",
+              lineHeight: 1,
+              padding: "0 2px",
+            }}
+          >
+            ×
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            zIndex: 9999,
+            background: "#fff",
+            border: "1.5px solid #e8ecf0",
+            borderRadius: 14,
+            boxShadow: "0 12px 40px rgba(15,23,42,0.14)",
+            padding: 16,
+            width: 340,
+            fontFamily: "'DM Sans', system-ui",
+            display: "flex",
+            gap: 16,
+          }}
+        >
+          {/* Left: Calendar */}
+          <div style={{ flex: 1 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewMonth === 0) {
+                    setViewMonth(11);
+                    setViewYear((y) => y - 1);
+                  } else setViewMonth((m) => m - 1);
+                }}
+                style={{
+                  width: 26,
+                  height: 26,
+                  border: "1px solid #e8ecf0",
+                  borderRadius: 6,
+                  background: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#64748b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                {MONTHS[viewMonth]} {viewYear}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewMonth === 11) {
+                    setViewMonth(0);
+                    setViewYear((y) => y + 1);
+                  } else setViewMonth((m) => m + 1);
+                }}
+                style={{
+                  width: 26,
+                  height: 26,
+                  border: "1px solid #e8ecf0",
+                  borderRadius: 6,
+                  background: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#64748b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(7, 1fr)",
+                gap: 1,
+              }}
+            >
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                <div
+                  key={i}
+                  style={{
+                    textAlign: "center",
+                    fontSize: 8,
+                    fontWeight: 700,
+                    color: "#94a3b8",
+                    paddingBottom: 3,
+                  }}
+                >
+                  {d}
+                </div>
+              ))}
+              {Array.from({ length: firstDay }).map((_, i) => (
+                <div key={`e${i}`} />
+              ))}
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(
+                (day) => {
+                  const isToday =
+                    today.getDate() === day &&
+                    today.getMonth() === viewMonth &&
+                    today.getFullYear() === viewYear;
+                  const isSel = selDate === day;
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => selectDate(day)}
+                      style={{
+                        width: "100%",
+                        aspectRatio: "1",
+                        border: "none",
+                        borderRadius: 5,
+                        background: isSel
+                          ? "#3b82f6"
+                          : isToday
+                            ? "#eff6ff"
+                            : "transparent",
+                        color: isSel ? "#fff" : isToday ? "#2563eb" : "#374151",
+                        fontSize: 11,
+                        fontWeight: isSel || isToday ? 700 : 400,
+                        cursor: "pointer",
+                        outline:
+                          isToday && !isSel ? "1.5px solid #bfdbfe" : "none",
+                      }}
+                    >
+                      {day}
+                    </button>
+                  );
+                },
+              )}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div
+            style={{ width: 1, background: "#f1f5f9", alignSelf: "stretch" }}
+          />
+
+          {/* Right: Time — Alarm Clock UI */}
+          <div
+            style={{
+              width: 100,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                letterSpacing: "0.07em",
+                marginBottom: 12,
+              }}
+            >
+              Time
+            </div>
+
+            {/* Clock display */}
+            <div
+              style={{
+                background: "#0f172a",
+                borderRadius: 12,
+                padding: "10px 14px",
+                fontFamily: "monospace",
+                fontSize: 22,
+                fontWeight: 800,
+                color: "#fff",
+                letterSpacing: "0.08em",
+                marginBottom: 14,
+                boxShadow: "0 4px 12px rgba(15,23,42,0.3)",
+              }}
+            >
+              {String(selHour).padStart(2, "0")}:
+              {String(selMin).padStart(2, "0")}
+            </div>
+
+            {/* Hour scroll */}
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 6,
+              }}
+            >
+              Hour
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 12,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  const h = (selHour - 1 + 24) % 24;
+                  setSelHour(h);
+                  if (selDate) commit(selDate, h, selMin);
+                }}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
+                  border: "1px solid #e8ecf0",
+                  background: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#64748b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: "#0f172a",
+                  minWidth: 28,
+                  textAlign: "center",
+                }}
+              >
+                {String(selHour).padStart(2, "0")}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const h = (selHour + 1) % 24;
+                  setSelHour(h);
+                  if (selDate) commit(selDate, h, selMin);
+                }}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
+                  border: "1px solid #e8ecf0",
+                  background: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#64748b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Minute scroll */}
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 6,
+              }}
+            >
+              Min
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const mins = MINUTES;
+                  const idx = mins.indexOf(selMin);
+                  const m = mins[(idx - 1 + mins.length) % mins.length];
+                  setSelMin(m);
+                  if (selDate) {
+                    commit(selDate, selHour, m);
+                    setTimeout(() => setOpen(false), 120);
+                  }
+                }}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
+                  border: "1px solid #e8ecf0",
+                  background: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#64748b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: "#0f172a",
+                  minWidth: 28,
+                  textAlign: "center",
+                }}
+              >
+                {String(selMin).padStart(2, "0")}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const mins = MINUTES;
+                  const idx = mins.indexOf(selMin);
+                  const m = mins[(idx + 1) % mins.length];
+                  setSelMin(m);
+                  if (selDate) {
+                    commit(selDate, selHour, m);
+                    setTimeout(() => setOpen(false), 120);
+                  }
+                }}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
+                  border: "1px solid #e8ecf0",
+                  background: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#64748b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
   const { editFormId } = useParams();
@@ -730,6 +1310,16 @@ const FormCreator = () => {
   const [savedTemplates, setSavedTemplates] = useState(() =>
     loadSavedTemplates(),
   );
+  const [formTemplates, setFormTemplates] = useState(() => {
+    try {
+      const raw = localStorage.getItem("simtrak_form_templates");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showFormTplModal, setShowFormTplModal] = useState(false);
+  const [formTplName, setFormTplName] = useState("");
   const [savingTplIdx, setSavingTplIdx] = useState(null);
   const [tplToast, setTplToast] = useState("");
 
@@ -826,7 +1416,7 @@ const FormCreator = () => {
   }, []);
 
   const addQuestion = () => {
-    setForm((c) => ({ ...c, questions: [...c.questions, emptyQuestion()] }));
+    setForm((c) => ({ ...c, questions: [emptyQuestion(), ...c.questions] }));
     setIsDirty(true);
   };
   const removeQuestion = (idx) => {
@@ -888,6 +1478,47 @@ const FormCreator = () => {
     const updated = deleteTemplate(prompt);
     setSavedTemplates(updated);
   }, []);
+
+  const saveFormAsTemplate = () => {
+    if (!formTplName.trim()) return;
+    const tpl = {
+      name: formTplName.trim(),
+      savedAt: Date.now(),
+      formType: form.formType,
+      title: form.title,
+      description: form.description,
+      questions: form.questions,
+      collectsName: form.collectsName,
+      collectsPhone: form.collectsPhone,
+      collectsCompanyDetails: form.collectsCompanyDetails,
+    };
+    const updated = [tpl, ...formTemplates.filter((t) => t.name !== tpl.name)];
+    localStorage.setItem("simtrak_form_templates", JSON.stringify(updated));
+    setFormTemplates(updated);
+    setShowFormTplModal(false);
+    setFormTplName("");
+    setTplToast(`Form template "${tpl.name}" saved!`);
+    setTimeout(() => setTplToast(""), 3000);
+  };
+
+  const loadFormTemplate = (tpl) => {
+    setForm((prev) => ({
+      ...prev,
+      formType: tpl.formType || prev.formType,
+      description: tpl.description || prev.description,
+      collectsName: tpl.collectsName,
+      collectsPhone: tpl.collectsPhone,
+      collectsCompanyDetails: tpl.collectsCompanyDetails,
+      questions: (tpl.questions || []).map((q) => ({
+        ...q,
+        optionsText: (q.options || []).join(", "),
+        answerTemplatesText: (q.answerTemplates || []).join(", "),
+      })),
+    }));
+    setIsDirty(true);
+    setTplToast(`Template "${tpl.name}" loaded!`);
+    setTimeout(() => setTplToast(""), 2500);
+  };
 
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
@@ -1119,6 +1750,194 @@ const FormCreator = () => {
         </div>
       )}
 
+      {/* Form Template Save Modal */}
+      {showFormTplModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.5)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: "24px 22px",
+              width: "100%",
+              maxWidth: 380,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 800,
+                color: "#0f172a",
+                margin: "0 0 6px",
+              }}
+            >
+              Save Form as Template
+            </h3>
+            <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 16px" }}>
+              Saves title, form type, description, questions & data settings.
+              You can load it later to create a new form.
+            </p>
+            <input
+              className="fc-input"
+              placeholder="Template name…"
+              value={formTplName}
+              onChange={(e) => setFormTplName(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveFormAsTemplate();
+                if (e.key === "Escape") setShowFormTplModal(false);
+              }}
+            />
+            {formTemplates.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <p
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "#94a3b8",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.07em",
+                    marginBottom: 6,
+                  }}
+                >
+                  Existing Templates
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    maxHeight: 120,
+                    overflowY: "auto",
+                  }}
+                >
+                  {formTemplates.map((t) => (
+                    <div
+                      key={t.name}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "6px 10px",
+                        background: "#f8fafc",
+                        borderRadius: 8,
+                        border: "1px solid #e8ecf0",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#0f172a",
+                        }}
+                      >
+                        {t.name}
+                      </span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            loadFormTemplate(t);
+                            setShowFormTplModal(false);
+                          }}
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: "#7c3aed",
+                            background: "#f3e8ff",
+                            border: "1px solid #e9d5ff",
+                            borderRadius: 6,
+                            padding: "3px 8px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Load
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = formTemplates.filter(
+                              (x) => x.name !== t.name,
+                            );
+                            localStorage.setItem(
+                              "simtrak_form_templates",
+                              JSON.stringify(updated),
+                            );
+                            setFormTemplates(updated);
+                          }}
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: "#ef4444",
+                            background: "#fff5f5",
+                            border: "1px solid #fecaca",
+                            borderRadius: 6,
+                            padding: "3px 8px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => setShowFormTplModal(false)}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  background: "#f8fafc",
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: 9,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "#64748b",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveFormAsTemplate}
+                disabled={!formTplName.trim()}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  background: "#7c3aed",
+                  border: "none",
+                  borderRadius: 9,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "#fff",
+                  cursor: "pointer",
+                  opacity: formTplName.trim() ? 1 : 0.5,
+                }}
+              >
+                Save Template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="fc-main">
         <div className="fc-wrap">
           {!isEditMode && draftData && (
@@ -1163,7 +1982,7 @@ const FormCreator = () => {
                 </p>
               )}
             </div>
-            {activeSection !== "done" && (
+            {/* {activeSection !== "done" && (
               <div className="fc-header-actions">
                 {isDirty && (
                   <button
@@ -1215,7 +2034,7 @@ const FormCreator = () => {
                   Publish
                 </button>
               </div>
-            )}
+            )} */}
           </div>
 
           {/* Status banners */}
@@ -1308,10 +2127,38 @@ const FormCreator = () => {
               {activeSection === "info" && (
                 <div className="fc-section">
                   <div className="fc-section-header">
-                    <h2 className="fc-section-title">General Information</h2>
-                    <p className="fc-section-desc">
-                      Set up the basic details for your form
-                    </p>
+                    <div>
+                      <h2 className="fc-section-title">General Information</h2>
+                      <p className="fc-section-desc">
+                        Set up the basic details for your form
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {isDirty && (
+                        <button
+                          type="button"
+                          className="fc-save-draft-btn"
+                          onClick={saveDraftToServer}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? (
+                            <>
+                              <span className="fc-spinner" /> Saving…
+                            </>
+                          ) : (
+                            <>💾 Save Draft</>
+                          )}
+                        </button>
+                      )}
+                      <button
+                        form="creator-form"
+                        type="submit"
+                        className="fc-publish-btn"
+                        disabled={isSaving}
+                      >
+                        ✓ Publish
+                      </button>
+                    </div>
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
@@ -1347,6 +2194,7 @@ const FormCreator = () => {
                         <option value="flash">⚡ Flash Form</option>
                         <option value="survey">📊 Survey</option>
                         <option value="event">🎫 Event Feedback</option>
+                        <option value="internal">🏢 Internal Feedback</option>
                       </select>
                     </div>
 
@@ -1492,10 +2340,38 @@ const FormCreator = () => {
               {activeSection === "settings" && (
                 <div className="fc-section">
                   <div className="fc-section-header">
-                    <h2 className="fc-section-title">Form Settings</h2>
-                    <p className="fc-section-desc">
-                      Configure availability, access, and restrictions
-                    </p>
+                    <div>
+                      <h2 className="fc-section-title">Form Settings</h2>
+                      <p className="fc-section-desc">
+                        Configure availability, access, and restrictions
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {isDirty && (
+                        <button
+                          type="button"
+                          className="fc-save-draft-btn"
+                          onClick={saveDraftToServer}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? (
+                            <>
+                              <span className="fc-spinner" /> Saving…
+                            </>
+                          ) : (
+                            <>💾 Save Draft</>
+                          )}
+                        </button>
+                      )}
+                      <button
+                        form="creator-form"
+                        type="submit"
+                        className="fc-publish-btn"
+                        disabled={isSaving}
+                      >
+                        ✓ Publish
+                      </button>
+                    </div>
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
@@ -1526,36 +2402,24 @@ const FormCreator = () => {
 
                     {/* FIX: datetime-local inputs now store local time directly — no UTC shift */}
                     <div className="fc-field">
-                      <label className="fc-label">
-                        Opens At{" "}
-                        <span className="fc-hint">(your local time)</span>
-                      </label>
-                      <input
-                        className="fc-input"
-                        type="datetime-local"
+                      <DateTimePicker
+                        label="Opens At"
+                        hint="Your local time"
                         value={form.opensAt}
-                        onChange={(e) => updateField("opensAt", e.target.value)}
+                        onChange={(v) => updateField("opensAt", v)}
                       />
                     </div>
                     <div className="fc-field">
-                      <label className="fc-label">
-                        Closes At{" "}
-                        {form.formType === "flash" ? (
-                          <span className="fc-req">* required for flash</span>
-                        ) : (
-                          <span className="fc-hint">
-                            (defaults to 5 days · your local time)
-                          </span>
-                        )}
-                      </label>
-                      <input
-                        className="fc-input"
-                        type="datetime-local"
+                      <DateTimePicker
+                        label="Closes At"
+                        hint={
+                          form.formType === "flash"
+                            ? "Required for flash forms"
+                            : "Defaults to 5 days"
+                        }
                         required={form.formType === "flash"}
                         value={form.closesAt}
-                        onChange={(e) =>
-                          updateField("closesAt", e.target.value)
-                        }
+                        onChange={(v) => updateField("closesAt", v)}
                       />
                       {form.formType === "flash" && !form.closesAt && (
                         <span
@@ -1738,33 +2602,284 @@ const FormCreator = () => {
                         {form.questions.length !== 1 ? "s" : ""} added
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      className="fc-add-q-btn"
-                      onClick={addQuestion}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "flex-start",
+                      }}
                     >
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
+                      <button
+                        type="button"
+                        className="fc-ghost-btn"
+                        onClick={() => setActiveSection("settings")}
                       >
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Add Question
-                    </button>
+                        ← Back
+                      </button>
+                      {isDirty && (
+                        <button
+                          type="button"
+                          className="fc-save-draft-btn"
+                          onClick={saveDraftToServer}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? (
+                            <>
+                              <span className="fc-spinner" /> Saving…
+                            </>
+                          ) : (
+                            <>💾 Save Draft</>
+                          )}
+                        </button>
+                      )}
+                      <button
+                        type="submit"
+                        className="fc-publish-btn"
+                        disabled={isSaving}
+                      >
+                        {isSaving ? (
+                          <>
+                            <span className="fc-spinner" /> Publishing…
+                          </>
+                        ) : (
+                          <>✓ Publish</>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
+                  {/* ── Form Templates (prominent, always visible) ── */}
+                  {formTemplates.length > 0 && (
+                    <div style={{ marginBottom: 18 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: 10,
+                        }}
+                      >
+                        <p className="fc-sub-label" style={{ margin: 0 }}>
+                          📁 My Form Templates
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormTplName(form.title || "");
+                            setShowFormTplModal(true);
+                          }}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#7c3aed",
+                            background: "#faf5ff",
+                            border: "1.5px solid #e9d5ff",
+                            borderRadius: 8,
+                            padding: "5px 12px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          + Save Current as Template
+                        </button>
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(200px, 1fr))",
+                          gap: 8,
+                        }}
+                      >
+                        {formTemplates.map((t) => (
+                          <div
+                            key={t.name}
+                            style={{
+                              background: "#faf5ff",
+                              border: "1.5px solid #e9d5ff",
+                              borderRadius: 11,
+                              padding: "12px 14px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ flex: 1 }}>
+                              <div
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  color: "#0f172a",
+                                  marginBottom: 3,
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {t.name}
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 5,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                {t.formType && (
+                                  <span
+                                    style={{
+                                      fontSize: 9,
+                                      fontWeight: 700,
+                                      color: "#7c3aed",
+                                      background: "#ede9fe",
+                                      padding: "2px 6px",
+                                      borderRadius: 99,
+                                      textTransform: "uppercase",
+                                      letterSpacing: "0.06em",
+                                    }}
+                                  >
+                                    {t.formType}
+                                  </span>
+                                )}
+                                <span
+                                  style={{
+                                    fontSize: 9,
+                                    fontWeight: 700,
+                                    color: "#64748b",
+                                    background: "#f1f5f9",
+                                    padding: "2px 6px",
+                                    borderRadius: 99,
+                                  }}
+                                >
+                                  {(t.questions || []).length} Q
+                                </span>
+                                {t.savedAt && (
+                                  <span
+                                    style={{
+                                      fontSize: 9,
+                                      color: "#94a3b8",
+                                      padding: "2px 0",
+                                    }}
+                                  >
+                                    {new Date(t.savedAt).toLocaleDateString(
+                                      "en-US",
+                                      {
+                                        month: "short",
+                                        day: "numeric",
+                                      },
+                                    )}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  loadFormTemplate(t);
+                                  setShowFormTplModal(false);
+                                }}
+                                style={{
+                                  flex: 1,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: "#7c3aed",
+                                  background: "#ede9fe",
+                                  border: "1px solid #e9d5ff",
+                                  borderRadius: 7,
+                                  padding: "6px 0",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Load
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = formTemplates.filter(
+                                    (x) => x.name !== t.name,
+                                  );
+                                  localStorage.setItem(
+                                    "simtrak_form_templates",
+                                    JSON.stringify(updated),
+                                  );
+                                  setFormTemplates(updated);
+                                }}
+                                style={{
+                                  width: 30,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: "#ef4444",
+                                  background: "#fff5f5",
+                                  border: "1px solid #fecaca",
+                                  borderRadius: 7,
+                                  padding: "6px 0",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Save as template CTA when no templates exist ── */}
+                  {formTemplates.length === 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        background: "#faf5ff",
+                        border: "1.5px dashed #e9d5ff",
+                        borderRadius: 10,
+                        padding: "12px 16px",
+                        marginBottom: 16,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#7c3aed",
+                          fontWeight: 500,
+                        }}
+                      >
+                        📁 No form templates yet — save this form as a reusable
+                        template
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormTplName(form.title || "");
+                          setShowFormTplModal(true);
+                        }}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "#7c3aed",
+                          background: "#ede9fe",
+                          border: "1.5px solid #e9d5ff",
+                          borderRadius: 8,
+                          padding: "6px 14px",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                          flexShrink: 0,
+                          marginLeft: 12,
+                        }}
+                      >
+                        Save Form Template After Adding Questions
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ── Per-question saved templates ── */}
                   <SavedTemplatesPanel
                     savedTemplates={savedTemplates}
                     onUse={addTemplate}
                     onDelete={handleDeleteTemplate}
                   />
 
+                  {/* ── Built-in question templates ── */}
                   <div className="fc-template-row">
                     <span className="fc-template-label">Quick add:</span>
                     {BUILTIN_QUESTION_TEMPLATES.map((t) => (
@@ -1779,6 +2894,33 @@ const FormCreator = () => {
                     ))}
                   </div>
 
+                  {/* ── Add Question button ── */}
+                  <button
+                    type="button"
+                    className="fc-add-q-btn"
+                    onClick={addQuestion}
+                    style={{
+                      width: "100%",
+                      justifyContent: "center",
+                      marginBottom: 12,
+                    }}
+                  >
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                    >
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Add Question
+                  </button>
+
+                  {/* ── Question list ── */}
                   <div className="fc-q-list">
                     {form.questions.map((q, idx) => (
                       <div key={idx} className="fc-q-card">
@@ -1863,41 +3005,77 @@ const FormCreator = () => {
                             </button>
                           </div>
                         </div>
-                        <div className="fc-q-body">
-                          <div className="fc-q-prompt-wrap">
-                            <label className="fc-label">
-                              Question Prompt <span className="fc-req">*</span>
-                            </label>
+
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            flexWrap: "wrap",
+                            padding: "4px 0",
+                          }}
+                        >
+                          <input
+                            className="fc-input"
+                            required
+                            style={{
+                              flex: "1 1 200px",
+                              minWidth: 140,
+                              fontSize: 13,
+                            }}
+                            value={q.prompt}
+                            onChange={(e) =>
+                              updateQuestion(idx, "prompt", e.target.value)
+                            }
+                            placeholder="Type your question…"
+                          />
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 5,
+                              cursor: "pointer",
+                              flexShrink: 0,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "#64748b",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             <input
-                              className="fc-input"
-                              required
-                              value={q.prompt}
+                              type="checkbox"
+                              checked={q.required}
                               onChange={(e) =>
-                                updateQuestion(idx, "prompt", e.target.value)
+                                updateQuestion(
+                                  idx,
+                                  "required",
+                                  e.target.checked,
+                                )
                               }
-                              placeholder="Enter your question here…"
+                              style={{
+                                width: 14,
+                                height: 14,
+                                accentColor: "#3b82f6",
+                                cursor: "pointer",
+                              }}
                             />
-                          </div>
-                          <div className="fc-q-type-wrap">
-                            <label className="fc-label">Response Type</label>
-                            <select
-                              className="fc-input"
-                              value={q.type}
-                              onChange={(e) =>
-                                updateQuestion(idx, "type", e.target.value)
-                              }
-                            >
-                              <option value="text">✍️ Text Answer</option>
-                              <option value="rating">⭐ Star Rating</option>
-                              <option value="single-choice">
-                                🔘 Single Choice
-                              </option>
-                              <option value="multiple-choice">
-                                ☑️ Multiple Choice
-                              </option>
-                            </select>
-                          </div>
+                            Required
+                          </label>
+                          <select
+                            className="fc-input"
+                            style={{ width: "auto", flexShrink: 0 }}
+                            value={q.type}
+                            onChange={(e) =>
+                              updateQuestion(idx, "type", e.target.value)
+                            }
+                          >
+                            <option value="text">✍️ Text</option>
+                            <option value="rating">⭐ Rating</option>
+                            <option value="single-choice">🔘 Single</option>
+                            <option value="multiple-choice">☑️ Multi</option>
+                          </select>
                         </div>
+
                         {(q.type === "single-choice" ||
                           q.type === "multiple-choice") && (
                           <div style={{ marginTop: 10 }}>
@@ -1920,6 +3098,7 @@ const FormCreator = () => {
                             />
                           </div>
                         )}
+
                         <div style={{ marginTop: 10 }}>
                           <label className="fc-label">
                             Suggested Answer Templates{" "}
@@ -1939,30 +3118,9 @@ const FormCreator = () => {
                             }
                           />
                         </div>
-                        <div className="fc-q-required">
-                          <input
-                            type="checkbox"
-                            id={`req-${idx}`}
-                            checked={q.required}
-                            onChange={(e) =>
-                              updateQuestion(idx, "required", e.target.checked)
-                            }
-                            style={{
-                              width: 14,
-                              height: 14,
-                              accentColor: "#3b82f6",
-                            }}
-                          />
-                          <label
-                            htmlFor={`req-${idx}`}
-                            className="fc-label"
-                            style={{ cursor: "pointer", margin: 0 }}
-                          >
-                            Mandatory
-                          </label>
-                        </div>
                       </div>
                     ))}
+
                     {form.questions.length === 0 && (
                       <div className="fc-empty-q">
                         <span style={{ fontSize: 36 }}>❓</span>
@@ -1971,42 +3129,6 @@ const FormCreator = () => {
                         </p>
                       </div>
                     )}
-                  </div>
-
-                  <div className="fc-nav-row">
-                    <button
-                      type="button"
-                      className="fc-ghost-btn"
-                      onClick={() => setActiveSection("settings")}
-                    >
-                      ← Back
-                    </button>
-                    <button
-                      type="submit"
-                      className="fc-submit-btn"
-                      disabled={isSaving}
-                    >
-                      {isSaving ? (
-                        <>
-                          <span className="fc-spinner" /> Publishing…
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            width="13"
-                            height="13"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>{" "}
-                          Save &amp; Publish
-                        </>
-                      )}
-                    </button>
                   </div>
                 </div>
               )}
@@ -2166,11 +3288,12 @@ const CSS = `
 .fc-save-tpl-btn:disabled { opacity:0.4; cursor:not-allowed; }
 .fc-save-tpl-btn--saved { background:#f0fdf4 !important; border-color:#bbf7d0 !important; color:#16a34a !important; }
 
-.fc-q-card { background:#fafbfc; border:1.5px solid #e8ecf0; border-radius:11px; padding:14px 16px; transition:border-color 0.15s; }
-.fc-q-card:focus-within { border-color:#3b82f6; }
-.fc-q-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+.fc-q-card { background:#fff; border:1.5px solid #e8ecf0; border-radius:12px; padding:14px 16px; transition:all 0.15s; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+.fc-q-card:focus-within { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.08); }
+.fc-q-card:hover { border-color:#cbd5e1; }
+.fc-q-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:6px; padding-bottom:10px; border-bottom:1px solid #f1f5f9; }
 .fc-q-meta { display:flex; align-items:center; gap:8px; }
-.fc-q-num  { width:24px; height:24px; border-radius:7px; background:#0f172a; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.fc-q-num  { width:22px; height:22px; border-radius:6px; background:#f1f5f9; color:#64748b; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid #e2e8f0; }
 .fc-q-type-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; }
 .fc-q-controls { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
 .fc-q-icon-btn { width:27px; height:27px; border-radius:6px; background:#f1f5f9; border:1px solid #e8ecf0; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; color:#64748b; font-weight:700; transition:all 0.13s; }
