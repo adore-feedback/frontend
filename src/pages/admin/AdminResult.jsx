@@ -2,7 +2,6 @@ import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { getFormResults, getForms } from "../../api/feedbackApi";
-import { getDemoResults } from "../../data/demoFeedback";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -221,13 +220,8 @@ const AdminResult = () => {
     getFormResults(formId, searchQuery ? { search: searchQuery } : {})
       .then((data) => setResult(data))
       .catch((err) => {
-        const fallback = getDemoResults(formId);
-        if (fallback?.analytics) {
-          setResult(fallback);
-        } else {
-          setLoadError(err?.message || "Could not load results for this form.");
-          setResult(null);
-        }
+        setLoadError(err?.message || "Could not load results for this form.");
+        setResult(null);
       })
       .finally(() => {
         setIsLoading(false);
@@ -520,7 +514,15 @@ const AdminResult = () => {
           setHasSearched(false);
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
           <span
             style={{
               width: 7,
@@ -1094,9 +1096,24 @@ const AdminResult = () => {
                       only the display label and styling change here.
                     */}
                     {[
-                      { data: sentimentData[0], color: "#10b981", emoji: "😊", displayLabel: null },
-                      { data: sentimentData[1], color: "#f59e0b", emoji: "😐", displayLabel: null },
-                      { data: sentimentData[2], color: "#6366f1", emoji: "📊", displayLabel: "Average" },
+                      {
+                        data: sentimentData[0],
+                        color: "#10b981",
+                        emoji: "😊",
+                        displayLabel: null,
+                      },
+                      {
+                        data: sentimentData[1],
+                        color: "#f59e0b",
+                        emoji: "😐",
+                        displayLabel: null,
+                      },
+                      {
+                        data: sentimentData[2],
+                        color: "#6366f1",
+                        emoji: "📊",
+                        displayLabel: "Average",
+                      },
                     ]
                       .filter((i) => i.data)
                       .map((item) => (

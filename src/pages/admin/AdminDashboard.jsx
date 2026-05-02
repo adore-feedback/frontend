@@ -8,7 +8,6 @@ import {
   updateFormSettings,
   generateInviteTokens,
 } from "../../api/feedbackApi";
-import { getDemoResults, demoForms } from "../../data/demoFeedback";
 
 const getFormId = (form) => form?._id || form?.id;
 
@@ -1311,7 +1310,6 @@ const AdminDashboard = () => {
         });
       } catch {
         setForms([]);
-        if (demoForms.length > 0) setSelectedFormId(getFormId(demoForms[0]));
       } finally {
         setIsLoading(false);
       }
@@ -1326,7 +1324,7 @@ const AdminDashboard = () => {
         const data = await getFormResults(selectedFormId);
         setSelectedResult(data);
       } catch {
-        setSelectedResult(getDemoResults(selectedFormId));
+        setSelectedResult({ analytics: {} });
       }
     };
     load();
