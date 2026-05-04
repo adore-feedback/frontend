@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import UserManagement from "./pages/admin/UserManagement";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import { useAuth } from "./context/AuthContext";
 
 const AdminLayout = () => {
   return (
@@ -23,70 +24,111 @@ const AdminLayout = () => {
   );
 };
 
+// Redirects logged-in users away from /login and /register
+const GuestOnlyRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to={getRoleBasePath(user.role)} replace />;
+  return children;
+};
+
+// Returns the base dashboard path for a given role
+const getRoleBasePath = (role) => {
+  if (role === "super_admin") return "/super_admin";
+  if (role === "admin") return "/admin";
+  return "/manager";
+};
+
+// Redirects root "/" based on role
+const RootRedirect = () => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={getRoleBasePath(user.role)} replace />;
+};
+
 const App = () => {
   return (
     <div>
       <Routes>
-        {/* ── Public ── */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        {/* ── Public / Guest only ── */}
+        <Route
+          path="/login"
+          element={
+            <GuestOnlyRoute>
+              <LoginPage />
+            </GuestOnlyRoute>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <GuestOnlyRoute>
+              <RegisterPage />
+            </GuestOnlyRoute>
+          }
+        />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/form/:formId" element={<PublicFeedbackForm />} />
 
-        {/* ── Redirect root to /admin ── */}
-        <Route path="/" element={<Navigate to="/admin" replace />} />
+        {/* ── Root redirect based on role ── */}
+        <Route path="/" element={<RootRedirect />} />
 
-        {/* ── Protected Admin area (all logged-in users) ── */}
+        {/* ══ SUPER ADMIN routes — /super_admin ══ */}
         <Route
-          path="/admin"
+          path="/super_admin"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["super_admin"]}>
               <AdminLayout />
             </ProtectedRoute>
           }
         >
-          {/* Super Admin only — user management */}
-          <Route
-            path="users"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
-                <UserManagement />
-              </ProtectedRoute>
-            }
-          />
           <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="forms/new" element={<FormCreator />} />
+          <Route path="forms/edit/:editFormId" element={<FormCreator />} />
+          <Route path="result" element={<AdminResult />} />
+          <Route path="result/:formId" element={<AdminResult />} />
+        </Route>
 
-          {/* Managers and above — form CRUD */}
-          <Route
-            path="forms/new"
-            element={
-              <ProtectedRoute
-                allowedRoles={["manager", "admin", "super_admin"]}
-              >
-                <FormCreator />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="forms/edit/:editFormId"
-            element={
-              <ProtectedRoute
-                allowedRoles={["manager", "admin", "super_admin"]}
-              >
-                <FormCreator />
-              </ProtectedRoute>
-            }
-          />
+        {/* ══ ADMIN routes — /admin ══ */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="forms/new" element={<FormCreator />} />
+          <Route path="forms/edit/:editFormId" element={<FormCreator />} />
+          <Route path="result" element={<AdminResult />} />
+          <Route path="result/:formId" element={<AdminResult />} />
+        </Route>
 
-          {/* Results — all roles */}
-          <Route element={<AdminResult />} path="result" />
-          <Route element={<AdminResult />} path="result/:formId" />
+        {/* ══ MANAGER routes — /manager ══ */}
+        <Route
+          path="/manager"
+          element={
+            <ProtectedRoute allowedRoles={["manager", "admin", "super_admin"]}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="forms/new" element={<FormCreator />} />
+          <Route path="forms/edit/:editFormId" element={<FormCreator />} />
+          <Route path="result" element={<AdminResult />} />
+          <Route path="result/:formId" element={<AdminResult />} />
+          {/* Managers cannot access user management */}
         </Route>
 
         {/* ── Catch-all ── */}
-        <Route path="*" element={<Navigate to="/admin" replace />} />
+        <Route path="*" element={<RootRedirect />} />
       </Routes>
     </div>
   );

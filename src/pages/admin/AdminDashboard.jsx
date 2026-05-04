@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import {
   getFormResults,
   getForms,
@@ -1096,6 +1097,7 @@ const MobileAnalyticsDrawer = ({
   analytics,
   onClose,
   onSettings,
+  basePath,
 }) => {
   const totalResponses = analytics.totalResponses || 0;
   const breakdown = analytics.sentimentBreakdown || [];
@@ -1265,7 +1267,7 @@ const MobileAnalyticsDrawer = ({
         </div>
 
         <Link
-          to={`/admin/result/${getFormId(selectedForm)}`}
+          to={`${basePath}/result/${getFormId(selectedForm)}`}
           style={{ ...S.ctaBtn, display: "flex", marginTop: 12 }}
         >
           <span>View Full Results</span>
@@ -1288,6 +1290,13 @@ const MobileAnalyticsDrawer = ({
 
 /* ═══ AdminDashboard ════════════════════════════════════════════════════════ */
 const AdminDashboard = () => {
+  const { user } = useAuth();
+  const basePath =
+    user?.role === "super_admin"
+      ? "/super_admin"
+      : user?.role === "admin"
+        ? "/admin"
+        : "/manager";
   const [forms, setForms] = useState([]);
   const [selectedFormId, setSelectedFormId] = useState(null);
   const [selectedResult, setSelectedResult] = useState({ analytics: {} });
@@ -1556,6 +1565,7 @@ const AdminDashboard = () => {
           analytics={analytics}
           onClose={() => setShowMobileAnalytics(false)}
           onSettings={openSettings}
+          basePath={basePath}
         />
       )}
 
@@ -1569,7 +1579,7 @@ const AdminDashboard = () => {
               live · {draftCount} draft
             </p>
           </div>
-          <Link to="/admin/forms/new" style={S.createBtn}>
+          <Link to={`${basePath}/forms/new`} style={S.createBtn}>
             <svg
               width="16"
               height="16"
@@ -1930,7 +1940,7 @@ const AdminDashboard = () => {
                             >
                               {!isDeleted && (
                                 <Link
-                                  to={`/admin/forms/edit/${id}`}
+                                  to={`${basePath}/forms/edit/${id}`}
                                   onClick={(e) => e.stopPropagation()}
                                   style={S.actionEdit}
                                   title="Edit this form"
@@ -1950,7 +1960,7 @@ const AdminDashboard = () => {
                               )}
 
                               <Link
-                                to={`/admin/result/${id}`}
+                                to={`${basePath}/result/${id}`}
                                 onClick={(e) => e.stopPropagation()}
                                 style={S.actionView}
                               >
@@ -2304,7 +2314,7 @@ const AdminDashboard = () => {
                 )}
 
                 <Link
-                  to={`/admin/result/${getFormId(selectedForm)}`}
+                  to={`${basePath}/result/${getFormId(selectedForm)}`}
                   style={S.ctaBtn}
                 >
                   <span>View Full Results</span>

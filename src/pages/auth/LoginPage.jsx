@@ -200,7 +200,11 @@ const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || "/admin";
+  const getRoleBasePath = (role) => {
+    if (role === "super_admin") return "/super_admin";
+    if (role === "admin") return "/admin";
+    return "/manager";
+  };
   const justRegistered = location.state?.registered;
 
   const [form, setForm] = useState({ email: "", password: "" });
@@ -218,8 +222,10 @@ const LoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      await login(form.email, form.password);
-      navigate(from, { replace: true });
+      const loggedInUser = await login(form.email, form.password);
+      const destination =
+        location.state?.from?.pathname || getRoleBasePath(loggedInUser.role);
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Link, useBlocker, useParams } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import {
   createForm,
   updateForm,
@@ -1287,6 +1288,13 @@ const DateTimePicker = ({ value, onChange, label, hint, required }) => {
 
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
+  const { user } = useAuth();
+  const basePath =
+    user?.role === "super_admin"
+      ? "/super_admin"
+      : user?.role === "admin"
+        ? "/admin"
+        : "/manager";
   const { editFormId } = useParams();
   const isEditMode = !!editFormId;
 
@@ -1951,7 +1959,7 @@ const FormCreator = () => {
           {/* Header */}
           <div className="fc-header">
             <div>
-              <Link to="/admin" className="fc-back-link">
+              <Link to={basePath} className="fc-back-link">
                 <svg
                   width="13"
                   height="13"

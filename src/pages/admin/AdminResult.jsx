@@ -2,6 +2,7 @@ import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { getFormResults, getForms } from "../../api/feedbackApi";
+import { useAuth } from "../../context/AuthContext";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -108,7 +109,7 @@ const DraftBanner = ({ formTitle }) => (
       <strong>"{formTitle}"</strong> is in Draft mode — analytics and responses
       will appear once it is published as <strong>Live</strong>.
     </span>
-    <Link to="/admin/forms/new" className="ar-draft-edit-link">
+    <Link to={`${basePath}/forms/new`} className="ar-draft-edit-link">
       Edit Form →
     </Link>
   </div>
@@ -137,7 +138,7 @@ const DeletedFormBanner = ({ formTitle }) => (
       <strong>"{formTitle || "This form"}"</strong> has been deleted — but all
       responses are permanently preserved below.
     </span>
-    <Link to="/admin" className="ar-draft-edit-link">
+    <Link to={basePath} className="ar-draft-edit-link">
       ← Dashboard
     </Link>
   </div>
@@ -145,6 +146,13 @@ const DeletedFormBanner = ({ formTitle }) => (
 
 /* ═══ AdminResult ════════════════════════════════ */
 const AdminResult = () => {
+  const { user } = useAuth();
+  const basePath =
+    user?.role === "super_admin"
+      ? "/super_admin"
+      : user?.role === "admin"
+        ? "/admin"
+        : "/manager";
   const { formId } = useParams();
   const navigate = useNavigate();
 
@@ -233,7 +241,7 @@ const AdminResult = () => {
   /* ── Redirect to first form when no formId in URL ── */
   useEffect(() => {
     if (!formId && formsLoadDone && allForms.length > 0) {
-      navigate(`/admin/result/${allForms[0]._id || allForms[0].id}`, {
+      navigate(`${basePath}/result/${allForms[0]._id || allForms[0].id}`, {
         replace: true,
       });
     }
@@ -324,7 +332,7 @@ const AdminResult = () => {
               marginBottom: 24,
             }}
           >
-            <Link to="/admin" className="ar-back-btn">
+            <Link to={basePath} className="ar-back-btn">
               <svg
                 width="15"
                 height="15"
@@ -372,7 +380,7 @@ const AdminResult = () => {
               {loadError}
             </p>
             <Link
-              to="/admin"
+              to={basePath}
               style={{
                 display: "inline-flex",
                 marginTop: 18,
@@ -561,7 +569,7 @@ const AdminResult = () => {
         aria-selected={isActive}
         className={`ar-fsp-item${isActive ? " ar-fsp-item--active" : ""}${isDeleted ? " ar-fsp-item--deleted" : ""}`}
         onClick={() => {
-          navigate(`/admin/result/${fId}`);
+          navigate(`${basePath}/result/${fId}`);
           setFormSearchOpen(false);
           setFormSearchInput("");
           setHasSearched(false);
@@ -639,7 +647,7 @@ const AdminResult = () => {
         {/* ── Header ── */}
         <div className="ar-top-bar">
           <div className="ar-top-left">
-            <Link to="/admin" className="ar-back-btn" title="Back to Dashboard">
+            <Link to={basePath} className="ar-back-btn" title="Back to Dashboard">
               <svg
                 width="15"
                 height="15"

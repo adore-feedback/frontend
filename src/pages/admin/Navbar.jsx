@@ -2,9 +2,21 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
-const NAV_ITEMS = [
+const Navbar = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const basePath =
+    user?.role === "super_admin"
+      ? "/super_admin"
+      : user?.role === "admin"
+        ? "/admin"
+        : "/manager";
+
+  const NAV_ITEMS = [
   {
-    to: "/admin",
+    to: basePath,
     label: "Dashboard",
     exact: true,
     icon: (
@@ -26,7 +38,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    to: "/admin/forms/new",
+    to: `${basePath}/forms/new`,
     label: "Create Form",
     icon: (
       <svg
@@ -45,7 +57,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    to: "/admin/result",
+    to: `${basePath}/result`,
     label: "Results",
     icon: (
       <svg
@@ -66,21 +78,15 @@ const NAV_ITEMS = [
   },
 ];
 
-const Navbar = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [isOpen, setIsOpen] = useState(false);
-  const { user, logout } = useAuth();
-
   const handleLogout = async () => {
     await logout();
     navigate("/login");
   };
 
   const isActive = (item) =>
-    item.exact
-      ? location.pathname === item.to || location.pathname === "/admin"
-      : location.pathname.startsWith(item.to);
+  item.exact
+    ? location.pathname === item.to
+    : location.pathname.startsWith(item.to);
 
   const SidebarContent = () => (
     <>
@@ -140,10 +146,10 @@ const Navbar = () => {
         <Link
           to="/admin/users"
           onClick={() => setIsOpen(false)}
-          className={`nb-link ${location.pathname === "/admin/users" ? "nb-link--active" : ""}`}
+          className={`nb-link ${location.pathname === "${basePath}/users" ? "nb-link--active" : ""}`}
         >
           <span
-            className={`nb-link-icon ${location.pathname === "/admin/users" ? "nb-link-icon--active" : ""}`}
+            className={`nb-link-icon ${location.pathname === "${basePath}/users" ? "nb-link-icon--active" : ""}`}
           >
             <svg
               width="17"
