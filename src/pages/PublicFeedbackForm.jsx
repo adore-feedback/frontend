@@ -880,6 +880,7 @@ const PublicFeedbackForm = () => {
   const [alreadyResponded, setAlreadyResponded] = useState(false);
   const [alreadyRespondedEmail, setAlreadyRespondedEmail] = useState("");
   const [activeQ, setActiveQ] = useState(null);
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [tokenError, setTokenError] = useState("");
 
   useEffect(() => {
