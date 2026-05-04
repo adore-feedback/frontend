@@ -1393,11 +1393,8 @@ const AdminDashboard = () => {
           ),
         );
       } else {
-        // No responses → Permanently delete
-        await deleteForm(id);
-        try {
-          await permanentDeleteForm(id);
-        } catch {}
+        // No responses → Permanently delete directly (skip soft-delete)
+        await permanentDeleteForm(id);
         setForms((prev) => prev.filter((f) => getFormId(f) !== id));
       }
       setSelectedFormId((prev) => {
@@ -1620,7 +1617,14 @@ const AdminDashboard = () => {
         <div style={S.statRow} className="dash-stat-row">
           <StatPill
             icon="📋"
-            value={forms.filter((f) => f.status !== "deleted").length}
+            value={
+              forms.filter(
+                (f) =>
+                  f.status === "live" ||
+                  f.status === "draft" ||
+                  f.status === "closed",
+              ).length
+            }
             label="Active Forms"
             accent="#3b82f6"
           />

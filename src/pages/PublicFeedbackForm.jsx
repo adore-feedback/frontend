@@ -1073,7 +1073,16 @@ const PublicFeedbackForm = () => {
     setStatus({ type: "", message: "" });
 
     const payload = {
-      respondent,
+      respondent: isAnonymous
+        ? {
+            name: "",
+            email: "",
+            phone: "",
+            uniqueId: "",
+            companyName: "",
+            companyDetails: "",
+          }
+        : respondent,
       rating: ratingValue ? Number(ratingValue) : undefined,
       sentiment: ratingValue ? getSentiment(ratingValue) : undefined,
       answers: form.questions.map((q) => ({
@@ -1438,159 +1447,139 @@ const PublicFeedbackForm = () => {
               </div>
             )}
 
-          {/* Participant Details */}
-          <section style={S.card}>
-            <div style={S.sectionHead}>
-              <div style={S.sectionIcon}>
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
+          {form?.visibility === "public" && !isPersonalizedLink && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 16px",
+                background: "#f8fafc",
+                border: "1px solid #e5e7eb",
+                borderRadius: 12,
+                marginBottom: 4,
+              }}
+            >
+              <div>
+                <div
+                  style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}
                 >
-                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </div>
-              <h2 style={S.sectionTitle}>Your Details</h2>
-            </div>
-
-            <div style={S.fieldGrid}>
-              {collectsName && (
-                <div style={S.fieldGroup}>
-                  <label style={S.label}>
-                    Full Name
-                    <span
-                      style={{
-                        color: "#9ca3af",
-                        fontWeight: 500,
-                        marginLeft: 4,
-                        fontSize: 10,
-                        textTransform: "none",
-                      }}
-                    >
-                      (optional)
-                    </span>
-                  </label>
-                  <input
-                    style={S.input}
-                    placeholder="Your full name"
-                    value={respondent.name}
-                    onChange={(e) =>
-                      setRespondent({ ...respondent, name: e.target.value })
-                    }
-                    readOnly={isPersonalizedLink}
-                    className="form-input"
-                  />
-                  {isPersonalizedLink && (
-                    <span style={S.prefillNote}>
-                      ✓ Pre-filled from your profile
-                    </span>
-                  )}
+                  Respond Anonymously
                 </div>
-              )}
-
-              <div style={S.fieldGroup}>
-                <label style={S.label}>
-                  Email Address{" "}
-                  {isRestricted && <span style={{ color: "#ef4444" }}>*</span>}
-                </label>
-                <input
-                  type="email"
-                  placeholder="you@example.com"
-                  required={isRestricted}
-                  value={respondent.email}
-                  readOnly={isPersonalizedLink || gateState === "verified"}
-                  onChange={(e) => {
-                    if (!isPersonalizedLink && gateState !== "verified")
-                      setRespondent({ ...respondent, email: e.target.value });
-                  }}
-                  className="form-input"
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
+                  Your name and email won't be collected
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAnonymous((v) => !v)}
+                style={{
+                  position: "relative",
+                  width: 44,
+                  height: 24,
+                  borderRadius: 99,
+                  background: isAnonymous ? "#111827" : "#e5e7eb",
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "background 0.2s",
+                  flexShrink: 0,
+                }}
+              >
+                <span
                   style={{
-                    ...S.input,
-                    ...(isPersonalizedLink || gateState === "verified"
-                      ? {
-                          background: "#f9fafb",
-                          color: "#6b7280",
-                          cursor: "not-allowed",
-                        }
-                      : {}),
+                    position: "absolute",
+                    top: 3,
+                    left: isAnonymous ? 23 : 3,
+                    width: 18,
+                    height: 18,
+                    borderRadius: "50%",
+                    background: "#fff",
+                    transition: "left 0.2s",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                    display: "block",
                   }}
                 />
-                {isPersonalizedLink && (
-                  <span style={S.prefillNote}>
-                    ✓ Verified via your personalised link
-                  </span>
-                )}
-                {!isPersonalizedLink && gateState === "verified" && (
-                  <span style={S.prefillNote}>
-                    ✓ Verified — cannot be changed
-                  </span>
-                )}
+              </button>
+            </div>
+          )}
+
+          {/* Participant Details */}
+          {!isAnonymous && (
+            <section style={S.card}>
+              <div style={S.sectionHead}>
+                <div style={S.sectionIcon}>
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                  >
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </div>
+                <h2 style={S.sectionTitle}>Your Details</h2>
               </div>
 
-              {form.collectsPhone && (
-                <div style={S.fieldGroup}>
-                  <label style={S.label}>
-                    Phone{" "}
-                    {form.phoneRequired && (
-                      <span style={{ color: "#ef4444" }}>*</span>
-                    )}
-                  </label>
-                  <input
-                    type="tel"
-                    style={S.input}
-                    placeholder="+91 98765 43210"
-                    required={form.phoneRequired}
-                    value={respondent.phone}
-                    pattern="[6-9][0-9]{9}"
-                    title="Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9"
-                    onChange={(e) => {
-                      const val = e.target.value
-                        .replace(/\D/g, "")
-                        .slice(0, 10);
-                      setRespondent({ ...respondent, phone: val });
-                    }}
-                    onInput={(e) => {
-                      const val = e.target.value;
-                      if (val.length > 0 && !/^[6-9]/.test(val)) {
-                        e.target.setCustomValidity(
-                          "Personal number must start with 6, 7, 8 or 9",
-                        );
-                      } else if (val.length > 0 && val.length < 10) {
-                        e.target.setCustomValidity(
-                          "Enter a complete 10-digit mobile number",
-                        );
-                      } else {
-                        e.target.setCustomValidity("");
+              <div style={S.fieldGrid}>
+                {collectsName && (
+                  <div style={S.fieldGroup}>
+                    <label style={S.label}>
+                      Full Name
+                      <span
+                        style={{
+                          color: "#9ca3af",
+                          fontWeight: 500,
+                          marginLeft: 4,
+                          fontSize: 10,
+                          textTransform: "none",
+                        }}
+                      >
+                        (optional)
+                      </span>
+                    </label>
+                    <input
+                      style={S.input}
+                      placeholder="Your full name"
+                      value={respondent.name}
+                      onChange={(e) =>
+                        setRespondent({ ...respondent, name: e.target.value })
                       }
-                    }}
-                    className="form-input"
-                  />
-                  <span style={S.hint}>
-                    10-digit number starting with 6, 7, 8 or 9
-                  </span>
-                </div>
-              )}
+                      readOnly={isPersonalizedLink}
+                      className="form-input"
+                    />
+                    {isPersonalizedLink && (
+                      <span style={S.prefillNote}>
+                        ✓ Pre-filled from your profile
+                      </span>
+                    )}
+                  </div>
+                )}
 
-              {form.collectsCompanyDetails && (
                 <div style={S.fieldGroup}>
                   <label style={S.label}>
-                    Company / Organisation{" "}
-                    {form.companyDetailsRequired && (
+                    Email Address{" "}
+                    {isRestricted && (
                       <span style={{ color: "#ef4444" }}>*</span>
                     )}
                   </label>
                   <input
+                    type="email"
+                    placeholder="you@example.com"
+                    required={isRestricted}
+                    value={respondent.email}
+                    readOnly={isPersonalizedLink || gateState === "verified"}
+                    onChange={(e) => {
+                      if (!isPersonalizedLink && gateState !== "verified")
+                        setRespondent({ ...respondent, email: e.target.value });
+                    }}
                     className="form-input"
                     style={{
                       ...S.input,
-                      ...(isPersonalizedLink ||
-                      (gateState === "verified" &&
-                        Boolean(respondent.companyName))
+                      ...(isPersonalizedLink || gateState === "verified"
                         ? {
                             background: "#f9fafb",
                             color: "#6b7280",
@@ -1598,36 +1587,116 @@ const PublicFeedbackForm = () => {
                           }
                         : {}),
                     }}
-                    placeholder="Your organisation"
-                    required={form.companyDetailsRequired}
-                    value={respondent.companyName}
-                    readOnly={
-                      isPersonalizedLink ||
-                      (gateState === "verified" &&
-                        Boolean(respondent.companyName))
-                    }
-                    onChange={(e) => {
-                      if (
-                        !isPersonalizedLink &&
-                        !(gateState === "verified" && respondent.companyName)
-                      )
-                        setRespondent({
-                          ...respondent,
-                          companyName: e.target.value,
-                        });
-                    }}
                   />
-                  {(isPersonalizedLink ||
-                    (gateState === "verified" &&
-                      Boolean(respondent.companyName))) && (
+                  {isPersonalizedLink && (
                     <span style={S.prefillNote}>
-                      ✓ Pre-filled from your profile
+                      ✓ Verified via your personalised link
+                    </span>
+                  )}
+                  {!isPersonalizedLink && gateState === "verified" && (
+                    <span style={S.prefillNote}>
+                      ✓ Verified — cannot be changed
                     </span>
                   )}
                 </div>
-              )}
-            </div>
-          </section>
+
+                {form.collectsPhone && (
+                  <div style={S.fieldGroup}>
+                    <label style={S.label}>
+                      Phone{" "}
+                      {form.phoneRequired && (
+                        <span style={{ color: "#ef4444" }}>*</span>
+                      )}
+                    </label>
+                    <input
+                      type="tel"
+                      style={S.input}
+                      placeholder="+91 98765 43210"
+                      required={form.phoneRequired}
+                      value={respondent.phone}
+                      pattern="[6-9][0-9]{9}"
+                      title="Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9"
+                      onChange={(e) => {
+                        const val = e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 10);
+                        setRespondent({ ...respondent, phone: val });
+                      }}
+                      onInput={(e) => {
+                        const val = e.target.value;
+                        if (val.length > 0 && !/^[6-9]/.test(val)) {
+                          e.target.setCustomValidity(
+                            "Personal number must start with 6, 7, 8 or 9",
+                          );
+                        } else if (val.length > 0 && val.length < 10) {
+                          e.target.setCustomValidity(
+                            "Enter a complete 10-digit mobile number",
+                          );
+                        } else {
+                          e.target.setCustomValidity("");
+                        }
+                      }}
+                      className="form-input"
+                    />
+                    <span style={S.hint}>
+                      10-digit number starting with 6, 7, 8 or 9
+                    </span>
+                  </div>
+                )}
+
+                {form.collectsCompanyDetails && (
+                  <div style={S.fieldGroup}>
+                    <label style={S.label}>
+                      Company / Organisation{" "}
+                      {form.companyDetailsRequired && (
+                        <span style={{ color: "#ef4444" }}>*</span>
+                      )}
+                    </label>
+                    <input
+                      className="form-input"
+                      style={{
+                        ...S.input,
+                        ...(isPersonalizedLink ||
+                        (gateState === "verified" &&
+                          Boolean(respondent.companyName))
+                          ? {
+                              background: "#f9fafb",
+                              color: "#6b7280",
+                              cursor: "not-allowed",
+                            }
+                          : {}),
+                      }}
+                      placeholder="Your organisation"
+                      required={form.companyDetailsRequired}
+                      value={respondent.companyName}
+                      readOnly={
+                        isPersonalizedLink ||
+                        (gateState === "verified" &&
+                          Boolean(respondent.companyName))
+                      }
+                      onChange={(e) => {
+                        if (
+                          !isPersonalizedLink &&
+                          !(gateState === "verified" && respondent.companyName)
+                        )
+                          setRespondent({
+                            ...respondent,
+                            companyName: e.target.value,
+                          });
+                      }}
+                    />
+                    {(isPersonalizedLink ||
+                      (gateState === "verified" &&
+                        Boolean(respondent.companyName))) && (
+                      <span style={S.prefillNote}>
+                        ✓ Pre-filled from your profile
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* Questions */}
           {(form.questions || []).map((q, idx) => (
