@@ -380,10 +380,10 @@ const DeleteModal = ({ form, onConfirm, onCancel, isDeleting, error }) => (
         <button style={S.btnDelete} onClick={onConfirm} disabled={isDeleting}>
           {isDeleting ? (
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={S.spinner} /> Deleting…
+              <span style={S.spinner} /> Archiving…
             </span>
           ) : (
-            "Yes, Delete Form"
+            "Yes, Archive Form"
           )}
         </button>
       </div>
@@ -560,8 +560,10 @@ const SettingsModal = ({ form, onSave, onCancel, isSaving, saveError }) => {
         style={{
           ...S.modal,
           maxWidth: 560,
+          width: "100%",
           maxHeight: "92vh",
           overflowY: "auto",
+          boxSizing: "border-box",
         }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -657,13 +659,21 @@ const SettingsModal = ({ form, onSave, onCancel, isSaving, saveError }) => {
 
           {/* Dates */}
           <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 12,
+            }}
           >
             <div>
               {fieldLabel("Opens At", "Leave blank to open immediately")}
               <input
                 type="datetime-local"
-                style={S.settingsInput}
+                style={{
+                  ...S.settingsInput,
+                  width: "100%",
+                  boxSizing: "border-box",
+                }}
                 value={opensAt}
                 onChange={(e) => setOpensAt(e.target.value)}
               />
@@ -672,7 +682,11 @@ const SettingsModal = ({ form, onSave, onCancel, isSaving, saveError }) => {
               {fieldLabel("Closes At", "Leave blank for no closing date")}
               <input
                 type="datetime-local"
-                style={S.settingsInput}
+                style={{
+                  ...S.settingsInput,
+                  width: "100%",
+                  boxSizing: "border-box",
+                }}
                 value={closesAt}
                 onChange={(e) => setClosesAt(e.target.value)}
               />
@@ -1912,8 +1926,8 @@ const AdminDashboard = () => {
                                 justifyContent: "flex-end",
                                 flexWrap: "wrap",
                               }}
+                              className="dash-action-btns"
                             >
-                              {/* ── FIX 2: Edit button for ALL non-deleted forms, not just drafts ── */}
                               {!isDeleted && (
                                 <Link
                                   to={`/admin/forms/edit/${id}`}
@@ -2782,7 +2796,8 @@ const S = {
     alignItems: "center",
     justifyContent: "center",
     zIndex: 9999,
-    padding: 20,
+    padding: "12px 8px",
+    overflowY: "auto",
   },
   modal: {
     background: "#fff",
@@ -2866,6 +2881,7 @@ const S = {
   },
   settingsInput: {
     width: "100%",
+    maxWidth: "100%",
     background: "#f8fafc",
     border: "1.5px solid #e2e8f0",
     borderRadius: 9,
@@ -2876,6 +2892,7 @@ const S = {
     boxSizing: "border-box",
     fontFamily: "'DM Sans', system-ui",
     transition: "border 0.15s",
+    minWidth: 0,
   },
   mobileDrawerOverlay: {
     position: "fixed",
@@ -2921,6 +2938,21 @@ const ANIM = `
   }
   @media (max-width: 400px) {
       .dash-stat-pill { flex: 1 1 100%; }
+  }
+
+  @media (max-width: 768px) {
+    .dash-action-btns {
+      flex-direction: column !important;
+      align-items: flex-end !important;
+      gap: 4px !important;
+    }
+    .dash-action-btns a,
+    .dash-action-btns button {
+      width: 100%;
+      justify-content: center;
+      text-align: center;
+      box-sizing: border-box;
+    }
   }
   `;
 

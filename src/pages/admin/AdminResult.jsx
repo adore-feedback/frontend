@@ -1644,7 +1644,7 @@ const CSS = `
   .ar-avatar { width:28px; height:28px; font-size:11px; border-radius:7px; }
   .ar-resp-name { font-size:12px; }
   .ar-resp-role { font-size:10px; }
-  .ar-td--date { display:none; }
+  .ar-td--date { display:table-cell; font-size:11px; padding:10px 8px !important; white-space:nowrap; }
   .ar-modal { padding:18px 14px; border-radius:14px; }
   .ar-modal-title { font-size:15px; }
 }

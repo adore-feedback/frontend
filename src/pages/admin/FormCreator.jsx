@@ -2826,10 +2826,8 @@ const FormCreator = () => {
                   {/* ── Save as template CTA when no templates exist ── */}
                   {formTemplates.length === 0 && (
                     <div
+                      className="fc-no-tpl-banner"
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
                         background: "#faf5ff",
                         border: "1.5px dashed #e9d5ff",
                         borderRadius: 10,
@@ -2842,6 +2840,7 @@ const FormCreator = () => {
                           fontSize: 12,
                           color: "#7c3aed",
                           fontWeight: 500,
+                          marginBottom: 8,
                         }}
                       >
                         📁 No form templates yet — save this form as a reusable
@@ -2849,25 +2848,13 @@ const FormCreator = () => {
                       </div>
                       <button
                         type="button"
+                        className="fc-no-tpl-btn"
                         onClick={() => {
                           setFormTplName(form.title || "");
                           setShowFormTplModal(true);
                         }}
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#7c3aed",
-                          background: "#ede9fe",
-                          border: "1.5px solid #e9d5ff",
-                          borderRadius: 8,
-                          padding: "6px 14px",
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                          flexShrink: 0,
-                          marginLeft: 12,
-                        }}
                       >
-                        Save Form Template After Adding Questions
+                        💾 Save as Template
                       </button>
                     </div>
                   )}
@@ -3363,6 +3350,28 @@ const CSS = `
   .fc-template-row { flex-direction:column; align-items:flex-start; }
   .fc-chip-row { gap:5px; }
   .fc-chip { font-size:11px; padding:6px 10px; }
+}
+
+.fc-no-tpl-banner { display:flex; flex-direction:column; }
+.fc-no-tpl-btn {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #ede9fe;
+  border: 1.5px solid #e9d5ff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  transition: background 0.15s;
+}
+.fc-no-tpl-btn:hover { background: #ddd6fe; }
+
+@media (min-width: 640px) {
+  .fc-no-tpl-banner { flex-direction: row; align-items: center; justify-content: space-between; }
+  .fc-no-tpl-btn { width: auto; white-space: nowrap; margin-left: 12px; flex-shrink: 0; }
 }
 `;
 
