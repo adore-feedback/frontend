@@ -111,7 +111,7 @@ const Navbar = () => {
             className="mt-3 w-full rounded-lg object-cover"
           />
           <img
-            src="/adore.jpeg"
+            src="/adore.png"
             alt="brand"
             className="mt-3 w-full rounded-lg object-cover"
           />
