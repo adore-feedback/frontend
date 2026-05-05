@@ -274,7 +274,7 @@ const RegisterPage = () => {
             className="adore-logo-wrap"
             style={{ gap: "20px", marginBottom: "32px" }}
           >
-            <img src="/adore.jpeg" alt="Adore" />
+            <img src="/adore.png" alt="Adore" />
             <div
               style={{
                 width: "1px",
