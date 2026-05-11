@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link, useLocation } from "react-router-dom";
 
 const API = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
@@ -43,9 +43,11 @@ function getStrength(pw) {
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const token = searchParams.get("token") || "";
-  const email = searchParams.get("email") || "";
+
+  const email = location.state?.email || searchParams.get("email") || "";
+  const otp = location.state?.otp || searchParams.get("token") || "";
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -56,17 +58,17 @@ const ResetPasswordPage = () => {
 
   const strength = getStrength(password);
 
-  if (!token || !email) {
+  if (!otp || !email) {
     return (
       <div className="adore-root">
         <style>{STYLES}</style>
         <div className="adore-shell">
           <div className="adore-card">
             <p style={{ textAlign: "center", color: "var(--danger)", marginBottom: 16 }}>
-              Invalid or missing reset link.
+              Invalid or missing reset session.
             </p>
             <p style={{ textAlign: "center" }}>
-              <Link to="/forgot-password" className="adore-link">Request a new one</Link>
+              <Link to="/forgot-password" className="adore-link">Request a new code</Link>
             </p>
           </div>
         </div>
@@ -74,20 +76,21 @@ const ResetPasswordPage = () => {
     );
   }
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     if (password !== confirm) return setError("Passwords do not match.");
+    if (password.length < 6) return setError("Password must be at least 6 characters.");
     setLoading(true);
     setError("");
     try {
       const res = await fetch(`${API}/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, token, password }),
+        body: JSON.stringify({ email, otp, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      navigate("/login", { state: { registered: true, message: "Password reset — please sign in." } });
+      navigate("/login", { state: { message: "Password reset — please sign in." } });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -105,8 +108,8 @@ const ResetPasswordPage = () => {
             <div style={{ width: "1px", background: "var(--warm-mid)", alignSelf: "stretch" }} />
             <img src="/simtrak.png" alt="Simtrak" />
           </div>
-          <h1 className="adore-title">Reset password</h1>
-          <p className="adore-subtitle">Enter your new password</p>
+          <h1 className="adore-title">New password</h1>
+          <p className="adore-subtitle">Choose a strong password</p>
           <div className="adore-divider" />
           <form onSubmit={handleSubmit} className="adore-form">
             <div className="adore-field">
