@@ -104,7 +104,7 @@ const handleSubmit = async (e) => {
       <div className="adore-shell">
         <div className="adore-card">
           <div className="adore-logo-wrap" style={{ gap: "20px" }}>
-            <img src="/adore.jpeg" alt="Adore" />
+            <img src="/adore.png" alt="Adore" />
             <div style={{ width: "1px", background: "var(--warm-mid)", alignSelf: "stretch" }} />
             <img src="/simtrak.png" alt="Simtrak" />
           </div>
