@@ -850,6 +850,185 @@ const SavedIdentityBanner = ({ email, name, onClear }) => (
   </div>
 );
 
+// ─── Nomination Table Section ─────────────────────────────────────────────────
+const NominationTableSection = ({
+  nominationTable,
+  tableRows,
+  setTableRows,
+  respondent,
+  isPersonalizedLink,
+  gateVerified,
+}) => {
+  const nt = nominationTable;
+  if (!nt?.enabled || !nt.columns?.length) return null;
+
+  const updateCell = (rowIdx, colId, value) => {
+    setTableRows((prev) =>
+      prev.map((row, i) => (i === rowIdx ? { ...row, [colId]: value } : row)),
+    );
+  };
+
+  /* Institution & coordinator values:
+     - restricted / personalized → prefilled from respondent, locked
+     - public → respondent types them in                               */
+  const institutionValue = respondent.companyName || "";
+  const coordinatorValue = respondent.name || "";
+  const isLocked = isPersonalizedLink || gateVerified;
+
+  return (
+    <section style={S.card}>
+      <style>{NTB_CSS}</style>
+
+      {/* Header */}
+      <div style={S.sectionHead}>
+        <div style={S.sectionIcon}>
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="3" y1="9" x2="21" y2="9" />
+            <line x1="3" y1="15" x2="21" y2="15" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </div>
+        <h2 style={S.sectionTitle}>{nt.heading || "Nomination Table"}</h2>
+      </div>
+
+      {/* Optional sub-heading */}
+      {nt.subHeading && (
+        <p
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#374151",
+            margin: "-8px 0 16px",
+            paddingLeft: 40,
+          }}
+        >
+          {nt.subHeading}
+        </p>
+      )}
+
+      {/* Institution + Coordinator fields */}
+      <div className="ntb-resp-meta-grid">
+        <div style={S.fieldGroup}>
+          <label style={S.label}>
+            {nt.institutionLabel || "Institution Name"}
+          </label>
+          <input
+            className="form-input"
+            style={{
+              ...S.input,
+              ...(isLocked && institutionValue
+                ? {
+                    background: "#f9fafb",
+                    color: "#6b7280",
+                    cursor: "not-allowed",
+                  }
+                : {}),
+            }}
+            placeholder="Enter institution name"
+            value={institutionValue}
+            readOnly={isLocked && Boolean(institutionValue)}
+            onChange={(e) => {
+              if (!isLocked)
+                setTableRows((prev) => {
+                  /* We store institution separately — no-op here,
+                     it's read from respondent.companyName on submit */
+                });
+            }}
+          />
+          {isLocked && institutionValue && (
+            <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
+          )}
+        </div>
+        <div style={S.fieldGroup}>
+          <label style={S.label}>
+            {nt.coordinatorLabel || "Coordinator / Teacher's Name"}
+          </label>
+          <input
+            className="form-input"
+            style={{
+              ...S.input,
+              ...(isLocked && coordinatorValue
+                ? {
+                    background: "#f9fafb",
+                    color: "#6b7280",
+                    cursor: "not-allowed",
+                  }
+                : {}),
+            }}
+            placeholder="Enter coordinator name"
+            value={coordinatorValue}
+            readOnly={isLocked && Boolean(coordinatorValue)}
+            onChange={() => {}}
+          />
+          {isLocked && coordinatorValue && (
+            <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
+          )}
+        </div>
+      </div>
+
+      {/* The actual table */}
+      <div className="ntb-resp-scroll">
+        <table className="ntb-resp-table">
+          <thead>
+            <tr>
+              <th className="ntb-resp-th ntb-resp-th-sr">Sr No.</th>
+              {nt.columns.map((col) => (
+                <th key={col.id} className="ntb-resp-th">
+                  {col.label || "—"}
+                  {col.required && (
+                    <span style={{ color: "#ef4444", marginLeft: 3 }}>*</span>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tableRows.map((row, rowIdx) => (
+              <tr key={rowIdx}>
+                <td className="ntb-resp-td ntb-resp-td-sr">{rowIdx + 1}</td>
+                {nt.columns.map((col) => (
+                  <td key={col.id} className="ntb-resp-td">
+                    <input
+                      className="ntb-resp-cell-input"
+                      type="text"
+                      required={col.required && rowIdx === 0}
+                      value={row[col.id] || ""}
+                      onChange={(e) =>
+                        updateCell(rowIdx, col.id, e.target.value)
+                      }
+                      placeholder="—"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p
+        style={{
+          fontSize: 11,
+          color: "#9ca3af",
+          margin: "10px 0 0",
+          fontStyle: "italic",
+        }}
+      >
+        Fill in the rows that apply. Leave unused rows blank.
+      </p>
+    </section>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const PublicFeedbackForm = () => {
   const { formId } = useParams();
@@ -881,6 +1060,7 @@ const PublicFeedbackForm = () => {
   const [alreadyRespondedEmail, setAlreadyRespondedEmail] = useState("");
   const [activeQ, setActiveQ] = useState(null);
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [tableRows, setTableRows] = useState([]);
   const [tokenError, setTokenError] = useState("");
 
   useEffect(() => {
@@ -906,6 +1086,7 @@ const PublicFeedbackForm = () => {
 
         const data = await getPublicForm(formId, access);
         setForm(data.form);
+        console.log("nominationTable received:", data.form?.nominationTable);
 
         if (data.alreadyResponded) {
           const verifiedEmail = data.prefill?.email || accessEmail || "";
@@ -1007,6 +1188,17 @@ const PublicFeedbackForm = () => {
     loadForm();
   }, [loadForm]);
 
+  useEffect(() => {
+    if (!form?.nominationTable?.enabled) return;
+    const count = form.nominationTable.rowCount || 6;
+    const cols = form.nominationTable.columns || [];
+    setTableRows(
+      Array.from({ length: count }, () =>
+        Object.fromEntries(cols.map((c) => [c.id, ""])),
+      ),
+    );
+  }, [form]);
+
   const handleGateVerify = useCallback(
     async ({ email, name }) => {
       setGateState("verifying");
@@ -1073,6 +1265,10 @@ const PublicFeedbackForm = () => {
     e.preventDefault();
     setStatus({ type: "", message: "" });
 
+    const hasTable =
+      form?.nominationTable?.enabled &&
+      (form.nominationTable.columns || []).length > 0;
+
     const payload = {
       respondent: isAnonymous
         ? {
@@ -1092,6 +1288,16 @@ const PublicFeedbackForm = () => {
         type: q.type,
         value: flattenAnswer(q, answers[q.id]),
       })),
+      ...(hasTable && {
+        nominationTableData: {
+          heading: form.nominationTable.heading,
+          subHeading: form.nominationTable.subHeading,
+          institutionName: respondent.companyName || "",
+          coordinatorName: respondent.name || "",
+          columns: form.nominationTable.columns,
+          rows: tableRows,
+        },
+      }),
     };
 
     try {
@@ -1697,6 +1903,18 @@ const PublicFeedbackForm = () => {
                 )}
               </div>
             </section>
+          )}
+
+          {/* Nomination Table */}
+          {form?.nominationTable?.enabled && (
+            <NominationTableSection
+              nominationTable={form.nominationTable}
+              tableRows={tableRows}
+              setTableRows={setTableRows}
+              respondent={respondent}
+              isPersonalizedLink={isPersonalizedLink}
+              gateVerified={gateState === "verified"}
+            />
           )}
 
           {/* Questions */}
@@ -2568,6 +2786,77 @@ const S = {
     color: "#fff",
   },
 };
+
+const NTB_CSS = `
+.ntb-resp-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.ntb-resp-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+}
+.ntb-resp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'DM Sans', system-ui;
+  font-size: 13px;
+  min-width: 480px;
+}
+.ntb-resp-th {
+  border: 1.5px solid #111827;
+  padding: 9px 12px;
+  text-align: center;
+  font-weight: 700;
+  color: #111827;
+  background: #fffde7;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.ntb-resp-th-sr {
+  width: 52px;
+}
+.ntb-resp-td {
+  border: 1.5px solid #111827;
+  padding: 0;
+}
+.ntb-resp-td-sr {
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: #374151;
+  background: #fffde7;
+  padding: 8px 4px;
+  width: 52px;
+}
+.ntb-resp-cell-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-family: 'DM Sans', system-ui;
+  color: #111827;
+  background: transparent;
+  box-sizing: border-box;
+  min-width: 100px;
+}
+.ntb-resp-cell-input:focus {
+  background: #f0f9ff;
+  box-shadow: inset 0 0 0 2px rgba(99,102,241,0.25);
+}
+.ntb-resp-cell-input::placeholder {
+  color: #d1d5db;
+}
+@media (max-width: 640px) {
+  .ntb-resp-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+`;
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');

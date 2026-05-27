@@ -150,6 +150,33 @@ const formToState = (apiForm) => ({
     answerTemplatesText: (q.answerTemplates || []).join(", "),
   })),
   personalizations: apiForm.personalizations || [],
+  nominationTable: apiForm.nominationTable
+    ? {
+        enabled: !!apiForm.nominationTable.enabled,
+        heading: apiForm.nominationTable.heading || "",
+        subHeading: apiForm.nominationTable.subHeading || "",
+        institutionLabel:
+          apiForm.nominationTable.institutionLabel || "Institution Name",
+        coordinatorLabel:
+          apiForm.nominationTable.coordinatorLabel ||
+          "Institution Coordinator / Teacher's Name",
+        rowCount: apiForm.nominationTable.rowCount || 6,
+        columns: (apiForm.nominationTable.columns || []).map((c) => ({
+          id: c.id || `col-${Date.now().toString(36)}`,
+          label: c.label || "",
+          width: c.width || "auto",
+          required: !!c.required,
+        })),
+      }
+    : {
+        enabled: false,
+        heading: "",
+        subHeading: "",
+        institutionLabel: "Institution Name",
+        coordinatorLabel: "Institution Coordinator / Teacher's Name",
+        rowCount: 6,
+        columns: [],
+      },
 });
 
 const BUILTIN_QUESTION_TEMPLATES = [
@@ -224,6 +251,15 @@ const INITIAL_FORM = {
   sessionKey: "",
   questions: [emptyQuestion()],
   personalizations: [],
+  nominationTable: {
+    enabled: false,
+    heading: "",
+    subHeading: "",
+    institutionLabel: "Institution Name",
+    coordinatorLabel: "Institution Coordinator / Teacher's Name",
+    rowCount: 6,
+    columns: [],
+  },
 };
 
 /* ─── sub-components ───────────────────────────────── */
@@ -1286,6 +1322,360 @@ const DateTimePicker = ({ value, onChange, label, hint, required }) => {
   );
 };
 
+/* ─── NominationTableBuilder ───────────────────────────────── */
+const emptyColumn = () => ({
+  id: `col-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+  label: "",
+  width: "auto",
+  required: false,
+});
+
+const NominationTableBuilder = ({ value, onChange }) => {
+  const nt = value;
+
+  const updateField = (field, val) => onChange({ ...nt, [field]: val });
+
+  const addColumn = () =>
+    onChange({ ...nt, columns: [...nt.columns, emptyColumn()] });
+
+  const removeColumn = (idx) =>
+    onChange({ ...nt, columns: nt.columns.filter((_, i) => i !== idx) });
+
+  const updateColumn = (idx, field, val) =>
+    onChange({
+      ...nt,
+      columns: nt.columns.map((c, i) =>
+        i === idx ? { ...c, [field]: val } : c,
+      ),
+    });
+
+  const moveColumn = (idx, dir) => {
+    const cols = [...nt.columns];
+    const target = idx + dir;
+    if (target < 0 || target >= cols.length) return;
+    [cols[idx], cols[target]] = [cols[target], cols[idx]];
+    onChange({ ...nt, columns: cols });
+  };
+
+  /* ── Preview rows (dummy data) ── */
+  const previewRows = Array.from({ length: Math.min(nt.rowCount || 3, 3) });
+
+  return (
+    <div className="ntb-wrap">
+      {/* Enable toggle */}
+      <div className="ntb-toggle-row">
+        <div className="ntb-toggle-info">
+          <span className="ntb-toggle-label">📋 Nomination / Roster Table</span>
+          <span className="ntb-toggle-desc">
+            Add a structured table to your form — ideal for nomination,
+            registration, or roster collection.
+          </span>
+        </div>
+        <button
+          type="button"
+          className={`fc-toggle-btn ${nt.enabled ? "fc-toggle-btn--on" : ""}`}
+          onClick={() => updateField("enabled", !nt.enabled)}
+        >
+          <span className="fc-toggle-thumb" />
+        </button>
+      </div>
+
+      {nt.enabled && (
+        <div className="ntb-body">
+          {/* ── Headings ── */}
+          <div className="ntb-section-label">Table Headings</div>
+          <div className="fc-field-grid" style={{ marginBottom: 14 }}>
+            <div className="fc-field">
+              <label className="fc-label">Main Heading</label>
+              <input
+                className="fc-input"
+                placeholder="e.g. Vidyakiran Appreciation Award"
+                value={nt.heading}
+                onChange={(e) => updateField("heading", e.target.value)}
+              />
+            </div>
+            <div className="fc-field">
+              <label className="fc-label">Sub-Heading</label>
+              <input
+                className="fc-input"
+                placeholder="e.g. Nomination Form"
+                value={nt.subHeading}
+                onChange={(e) => updateField("subHeading", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* ── Institution / Coordinator labels ── */}
+          <div className="ntb-section-label">Institution Fields</div>
+          <div className="ntb-info-note" style={{ marginBottom: 10 }}>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            For restricted forms these fields are pre-filled from the
+            respondent's personalization data. Public respondents fill them in
+            manually.
+          </div>
+          <div className="fc-field-grid" style={{ marginBottom: 14 }}>
+            <div className="fc-field">
+              <label className="fc-label">Institution Field Label</label>
+              <input
+                className="fc-input"
+                placeholder="Institution Name"
+                value={nt.institutionLabel}
+                onChange={(e) =>
+                  updateField("institutionLabel", e.target.value)
+                }
+              />
+            </div>
+            <div className="fc-field">
+              <label className="fc-label">Coordinator Field Label</label>
+              <input
+                className="fc-input"
+                placeholder="Institution Coordinator / Teacher's Name"
+                value={nt.coordinatorLabel}
+                onChange={(e) =>
+                  updateField("coordinatorLabel", e.target.value)
+                }
+              />
+            </div>
+          </div>
+
+          {/* ── Row count ── */}
+          <div className="ntb-section-label">Table Rows</div>
+          <div className="fc-field" style={{ maxWidth: 160, marginBottom: 14 }}>
+            <label className="fc-label">Number of Data Rows</label>
+            <input
+              type="number"
+              className="fc-input"
+              min={1}
+              max={50}
+              value={nt.rowCount}
+              onChange={(e) =>
+                updateField(
+                  "rowCount",
+                  Math.max(1, Math.min(50, Number(e.target.value) || 1)),
+                )
+              }
+            />
+          </div>
+
+          {/* ── Columns ── */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <span className="ntb-section-label" style={{ margin: 0 }}>
+              Columns{" "}
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: "#0f172a",
+                  color: "#fff",
+                  borderRadius: 99,
+                  padding: "1px 7px",
+                  marginLeft: 4,
+                }}
+              >
+                {nt.columns.length}
+              </span>
+            </span>
+            <button
+              type="button"
+              className="fc-add-q-btn"
+              onClick={addColumn}
+              style={{ padding: "6px 14px", fontSize: 11 }}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Column
+            </button>
+          </div>
+
+          {nt.columns.length === 0 && (
+            <div className="fc-empty-q" style={{ marginBottom: 12 }}>
+              <span style={{ fontSize: 28 }}>📊</span>
+              <p>
+                No columns yet. Add at least one column to build your table.
+              </p>
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              marginBottom: 16,
+            }}
+          >
+            {nt.columns.map((col, idx) => (
+              <div key={col.id} className="ntb-col-row">
+                <div className="ntb-col-num">{idx + 1}</div>
+                <input
+                  className="fc-input"
+                  style={{ flex: 1 }}
+                  placeholder={`Column ${idx + 1} header…`}
+                  value={col.label}
+                  onChange={(e) => updateColumn(idx, "label", e.target.value)}
+                />
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={col.required}
+                    onChange={(e) =>
+                      updateColumn(idx, "required", e.target.checked)
+                    }
+                    style={{
+                      width: 13,
+                      height: 13,
+                      accentColor: "#3b82f6",
+                      cursor: "pointer",
+                    }}
+                  />
+                  Req
+                </label>
+                <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="fc-q-icon-btn"
+                    onClick={() => moveColumn(idx, -1)}
+                    disabled={idx === 0}
+                    title="Move left"
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    className="fc-q-icon-btn"
+                    onClick={() => moveColumn(idx, 1)}
+                    disabled={idx === nt.columns.length - 1}
+                    title="Move right"
+                  >
+                    →
+                  </button>
+                  <button
+                    type="button"
+                    className="fc-q-icon-btn fc-q-icon-btn--danger"
+                    onClick={() => removeColumn(idx)}
+                    title="Remove column"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Live Preview ── */}
+          {nt.columns.length > 0 && (
+            <div className="ntb-preview-wrap">
+              <div className="ntb-section-label" style={{ marginBottom: 10 }}>
+                🔍 Preview
+              </div>
+              <div className="ntb-preview-scroll">
+                <table className="ntb-table">
+                  <thead>
+                    {nt.heading && (
+                      <tr>
+                        <th
+                          colSpan={nt.columns.length + 1}
+                          className="ntb-th-heading"
+                        >
+                          {nt.heading}
+                          {nt.subHeading && (
+                            <>
+                              <br />
+                              <span className="ntb-subheading">
+                                {nt.subHeading}
+                              </span>
+                            </>
+                          )}
+                        </th>
+                      </tr>
+                    )}
+                    <tr>
+                      <th className="ntb-th ntb-th-sr">Sr No.</th>
+                      {nt.columns.map((c, i) => (
+                        <th key={c.id} className="ntb-th">
+                          {c.label || `Column ${i + 1}`}
+                          {c.required && (
+                            <span style={{ color: "#ef4444", marginLeft: 2 }}>
+                              *
+                            </span>
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((_, ri) => (
+                      <tr key={ri}>
+                        <td className="ntb-td ntb-td-sr">{ri + 1}</td>
+                        {nt.columns.map((c) => (
+                          <td key={c.id} className="ntb-td ntb-td-empty" />
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {nt.rowCount > 3 && (
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "#94a3b8",
+                    margin: "6px 0 0",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Preview shows 3 of {nt.rowCount} rows.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
   const { user } = useAuth();
@@ -1553,6 +1943,20 @@ const FormCreator = () => {
         options: splitList(q.optionsText),
         answerTemplates: splitList(q.answerTemplatesText),
       })),
+    nominationTable: {
+      enabled: form.nominationTable.enabled,
+      heading: form.nominationTable.heading,
+      subHeading: form.nominationTable.subHeading,
+      institutionLabel: form.nominationTable.institutionLabel,
+      coordinatorLabel: form.nominationTable.coordinatorLabel,
+      rowCount: Number(form.nominationTable.rowCount) || 6,
+      columns: form.nominationTable.columns.map((c) => ({
+        id: c.id,
+        label: c.label,
+        width: c.width || "auto",
+        required: !!c.required,
+      })),
+    },
   });
 
   // FIX: Convert local datetime strings to ISO before sending to server
@@ -2874,6 +3278,14 @@ const FormCreator = () => {
                     onDelete={handleDeleteTemplate}
                   />
 
+                  {/* ── Nomination Table Builder ── */}
+                  <NominationTableBuilder
+                    value={form.nominationTable}
+                    onChange={(val) => updateField("nominationTable", val)}
+                  />
+
+                  <div className="fc-divider" style={{ margin: "16px 0" }} />
+
                   {/* ── Built-in question templates ── */}
                   <div className="fc-template-row">
                     <span className="fc-template-label">Quick add:</span>
@@ -3381,6 +3793,28 @@ const CSS = `
   .fc-no-tpl-banner { flex-direction: row; align-items: center; justify-content: space-between; }
   .fc-no-tpl-btn { width: auto; white-space: nowrap; margin-left: 12px; flex-shrink: 0; }
 }
+
+/* ── Nomination Table Builder ─────────────────────────────── */
+.ntb-wrap { margin-bottom: 18px; background: #fff; border: 1.5px solid #e8ecf0; border-radius: 13px; overflow: hidden; }
+.ntb-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; }
+.ntb-toggle-info { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.ntb-toggle-label { font-size: 13px; font-weight: 700; color: #0f172a; }
+.ntb-toggle-desc { font-size: 12px; color: #64748b; font-weight: 400; }
+.ntb-body { border-top: 1.5px solid #f1f5f9; padding: 16px; display: flex; flex-direction: column; }
+.ntb-section-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.ntb-info-note { display: flex; align-items: flex-start; gap: 7px; padding: 9px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 11.5px; color: #1d4ed8; font-weight: 500; line-height: 1.5; }
+.ntb-col-row { display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #e8ecf0; border-radius: 9px; padding: 8px 10px; }
+.ntb-col-num { width: 20px; height: 20px; border-radius: 5px; background: #e2e8f0; color: #64748b; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ntb-preview-wrap { background: #f8fafc; border: 1px solid #e8ecf0; border-radius: 10px; padding: 14px; }
+.ntb-preview-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ntb-table { width: 100%; border-collapse: collapse; font-size: 11.5px; font-family: 'DM Sans', system-ui; min-width: 400px; }
+.ntb-th-heading { background: #fffde7; border: 1.5px solid #0f172a; padding: 8px 10px; text-align: center; font-size: 13px; font-weight: 800; color: #0f172a; letter-spacing: 0.01em; }
+.ntb-subheading { font-size: 12px; font-weight: 700; }
+.ntb-th { border: 1.5px solid #0f172a; padding: 7px 10px; text-align: center; font-weight: 700; color: #0f172a; background: #fffde7; white-space: nowrap; }
+.ntb-th-sr { width: 48px; }
+.ntb-td { border: 1.5px solid #0f172a; padding: 0; height: 36px; }
+.ntb-td-sr { text-align: center; font-weight: 700; font-size: 11px; color: #374151; background: #fffde7; }
+.ntb-td-empty { background: #fff; min-width: 100px; }
 `;
 
 export default FormCreator;
