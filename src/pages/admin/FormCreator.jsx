@@ -1389,7 +1389,7 @@ const NominationTableBuilder = ({ value, onChange }) => {
               <label className="fc-label">Main Heading</label>
               <input
                 className="fc-input"
-                placeholder="e.g. Vidyakiran Appreciation Award"
+                placeholder="e.g. Appreciation Award"
                 value={nt.heading}
                 onChange={(e) => updateField("heading", e.target.value)}
               />
@@ -1398,7 +1398,7 @@ const NominationTableBuilder = ({ value, onChange }) => {
               <label className="fc-label">Sub-Heading</label>
               <input
                 className="fc-input"
-                placeholder="e.g. Nomination Form"
+                placeholder="Any Form Name"
                 value={nt.subHeading}
                 onChange={(e) => updateField("subHeading", e.target.value)}
               />

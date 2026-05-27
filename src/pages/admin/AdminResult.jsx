@@ -9,7 +9,6 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
 });
-
 /* ─── small components ─────────────────────────── */
 const SentimentBadge = ({ sentiment }) => {
   const MAP = {
@@ -91,7 +90,7 @@ const ProgressBar = ({ value, max, color = "#3b82f6" }) => {
 };
 
 /* ── Draft Mode Banner ── */
-const DraftBanner = ({ formTitle }) => (
+const DraftBanner = ({ formTitle, basePath }) => (
   <div className="ar-draft-banner">
     <svg
       width="15"
@@ -116,7 +115,7 @@ const DraftBanner = ({ formTitle }) => (
 );
 
 /* ── Deleted Form Banner ── */
-const DeletedFormBanner = ({ formTitle }) => (
+const DeletedFormBanner = ({ formTitle, basePath }) => (
   <div className="ar-deleted-banner">
     <svg
       width="15"
@@ -235,7 +234,6 @@ const AdminResult = () => {
         setIsLoading(false);
         setIsSearching(false);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId, searchQuery]);
 
   /* ── Redirect to first form when no formId in URL ── */
@@ -647,7 +645,11 @@ const AdminResult = () => {
         {/* ── Header ── */}
         <div className="ar-top-bar">
           <div className="ar-top-left">
-            <Link to={basePath} className="ar-back-btn" title="Back to Dashboard">
+            <Link
+              to={basePath}
+              className="ar-back-btn"
+              title="Back to Dashboard"
+            >
               <svg
                 width="15"
                 height="15"
@@ -954,9 +956,14 @@ const AdminResult = () => {
         </div>
 
         {/* ── Banners ── */}
-        {isDeletedForm && <DeletedFormBanner formTitle={currentForm?.title} />}
+        {isDeletedForm && (
+          <DeletedFormBanner
+            formTitle={currentForm?.title}
+            basePath={basePath}
+          />
+        )}
         {isDraft && !isDeletedForm && currentForm && (
-          <DraftBanner formTitle={currentForm.title} />
+          <DraftBanner formTitle={currentForm.title} basePath={basePath} />
         )}
 
         {/* ── KPI Strip ── */}
@@ -1490,6 +1497,139 @@ const AdminResult = () => {
                 </p>
               )}
             </div>
+
+            {selectedResponse.nominationTableData &&
+              selectedResponse.nominationTableData.columns?.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <p
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: "#94a3b8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      margin: "0 0 10px",
+                    }}
+                  >
+                    {selectedResponse.nominationTableData.heading || "Nomination Table"}
+                    {selectedResponse.nominationTableData.subHeading && (
+                      <span style={{ fontWeight: 500, marginLeft: 6, textTransform: "none", fontSize: 11 }}>
+                        — {selectedResponse.nominationTableData.subHeading}
+                      </span>
+                    )}
+                  </p>
+                  {(selectedResponse.nominationTableData.institutionName ||
+                    selectedResponse.nominationTableData.coordinatorName) && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 16,
+                        marginBottom: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {selectedResponse.nominationTableData.institutionName && (
+                        <div style={{ fontSize: 12, color: "#374151" }}>
+                          <span style={{ fontWeight: 700, color: "#64748b" }}>
+                            {selectedResponse.nominationTableData.institutionLabel || "Institution"}:{" "}
+                          </span>
+                          {selectedResponse.nominationTableData.institutionName}
+                        </div>
+                      )}
+                      {selectedResponse.nominationTableData.coordinatorName && (
+                        <div style={{ fontSize: 12, color: "#374151" }}>
+                          <span style={{ fontWeight: 700, color: "#64748b" }}>
+                            {selectedResponse.nominationTableData.coordinatorLabel || "Coordinator"}:{" "}
+                          </span>
+                          {selectedResponse.nominationTableData.coordinatorName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1.5px solid #111827" }}>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: 12,
+                        fontFamily: "'DM Sans', system-ui",
+                        minWidth: 300,
+                      }}
+                    >
+                      <thead>
+                        <tr>
+                          <th
+                            style={{
+                              border: "1px solid #111827",
+                              padding: "7px 10px",
+                              background: "#fffde7",
+                              fontWeight: 700,
+                              color: "#111827",
+                              textAlign: "center",
+                              width: 40,
+                            }}
+                          >
+                            Sr.
+                          </th>
+                          {selectedResponse.nominationTableData.columns.map((col) => (
+                            <th
+                              key={col.id || col.label}
+                              style={{
+                                border: "1px solid #111827",
+                                padding: "7px 10px",
+                                background: "#fffde7",
+                                fontWeight: 700,
+                                color: "#111827",
+                                textAlign: "center",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {col.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedResponse.nominationTableData.rows || [])
+                          .filter((row) =>
+                            selectedResponse.nominationTableData.columns.some(
+                              (col) => row[col.id]?.trim()
+                            )
+                          )
+                          .map((row, ri) => (
+                            <tr key={ri}>
+                              <td
+                                style={{
+                                  border: "1px solid #111827",
+                                  padding: "6px 8px",
+                                  textAlign: "center",
+                                  fontWeight: 700,
+                                  fontSize: 11,
+                                  background: "#fffde7",
+                                }}
+                              >
+                                {ri + 1}
+                              </td>
+                              {selectedResponse.nominationTableData.columns.map((col) => (
+                                <td
+                                  key={col.id || col.label}
+                                  style={{
+                                    border: "1px solid #111827",
+                                    padding: "6px 10px",
+                                    color: "#374151",
+                                    background: "#fff",
+                                  }}
+                                >
+                                  {row[col.id] || "—"}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
             <button
               type="button"

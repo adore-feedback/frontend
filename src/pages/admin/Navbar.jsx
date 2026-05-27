@@ -94,7 +94,7 @@ const Navbar = () => {
       <div className="nb-brand">
         <div>
           <span className="block text-[20px] font-extrabold text-black tracking-tight">
-            Feedback Portal
+            OneCollect
           </span>
 
           <span className="block text-[11px] font-medium text-gray-500 tracking-wide leading-tight text-center">

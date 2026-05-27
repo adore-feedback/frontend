@@ -936,13 +936,7 @@ const NominationTableSection = ({
             placeholder="Enter institution name"
             value={institutionValue}
             readOnly={isLocked && Boolean(institutionValue)}
-            onChange={(e) => {
-              if (!isLocked)
-                setTableRows((prev) => {
-                  /* We store institution separately — no-op here,
-                     it's read from respondent.companyName on submit */
-                });
-            }}
+            onChange={() => {}}
           />
           {isLocked && institutionValue && (
             <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
