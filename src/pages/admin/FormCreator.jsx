@@ -19,6 +19,7 @@ const emptyQuestion = () => ({
   required: false,
   optionsText: "",
   answerTemplatesText: "",
+  allowCustomText: true,
 });
 
 const splitList = (v) =>
@@ -92,13 +93,6 @@ const defaultClosesAt = (formType) => {
   return toLocalDatetimeString(d);
 };
 
-/**
- * FIX: opensAt / closesAt datetime conversion
- * datetime-local inputs give "YYYY-MM-DDTHH:mm" in LOCAL time.
- * We must NOT use new Date(localString).toISOString() because that converts
- * to UTC and shifts the time. Instead we keep the string as-is and only
- * convert to ISO when sending to the server.
- */
 const toLocalDatetimeString = (dateOrIso) => {
   if (!dateOrIso) return "";
   const d = typeof dateOrIso === "string" ? new Date(dateOrIso) : dateOrIso;
@@ -148,6 +142,7 @@ const formToState = (apiForm) => ({
     ...q,
     optionsText: (q.options || []).join(", "),
     answerTemplatesText: (q.answerTemplates || []).join(", "),
+    allowCustomText: q.allowCustomText !== false,
   })),
   personalizations: apiForm.personalizations || [],
   nominationTable: apiForm.nominationTable
@@ -228,6 +223,7 @@ const QTYPE_ICONS = {
   rating: "⭐",
   "single-choice": "🔘",
   "multiple-choice": "☑️",
+  paragraph: "📝",
 };
 
 const INITIAL_FORM = {
@@ -240,8 +236,11 @@ const INITIAL_FORM = {
   visibility: "public",
   allowedRespondentsText: "",
   collectsName: true,
+  nameRequired: false,
   collectsPhone: true,
   phoneRequired: false,
+  collectsEmail: true,
+  emailRequired: false,
   collectsCompanyDetails: true,
   companyDetailsRequired: false,
   duplicateCheckFields: ["email", "phone"],
@@ -260,6 +259,177 @@ const INITIAL_FORM = {
     rowCount: 6,
     columns: [],
   },
+};
+
+const GoogleFormImporter = ({ onImport, onClose }) => {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+
+  const parseGoogleFormText = (raw) => {
+    const lines = raw
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const questions = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      // Detect question patterns: lines ending in ? or followed by option lines
+      const isQ = line.endsWith("?") || line.match(/^\d+[\.\)]\s+.+/);
+      if (isQ) {
+        const prompt = line.replace(/^\d+[\.\)]\s*/, "").trim();
+        const opts = [];
+        let j = i + 1;
+        while (j < lines.length) {
+          const next = lines[j];
+          // Option patterns: (a) A. ○ □ • - *
+          if (
+            next.match(/^[\(\[]?[a-zA-Z][\)\]\.]\s+.+/) ||
+            next.match(/^[○•\-\*□]\s+.+/)
+          ) {
+            opts.push(
+              next
+                .replace(/^[\(\[]?[a-zA-Z][\)\]\.]?\s*|^[○•\-\*□]\s*/, "")
+                .trim(),
+            );
+            j++;
+          } else break;
+        }
+        const type = opts.length > 1 ? "single-choice" : "text";
+        questions.push({
+          ...emptyQuestion(),
+          prompt,
+          type,
+          optionsText: opts.join(", "),
+        });
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    return questions;
+  };
+
+  const handleImport = () => {
+    setError("");
+    if (!text.trim()) {
+      setError("Paste your Google Form content first.");
+      return;
+    }
+    const questions = parseGoogleFormText(text);
+    if (!questions.length) {
+      setError(
+        "No questions detected. Try copying the full form text from Google Forms preview.",
+      );
+      return;
+    }
+    onImport(questions);
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.5)",
+        backdropFilter: "blur(4px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 99999,
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 16,
+          padding: "24px 22px",
+          width: "100%",
+          maxWidth: 520,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+        }}
+      >
+        <h3
+          style={{
+            fontSize: 16,
+            fontWeight: 800,
+            color: "#0f172a",
+            margin: "0 0 6px",
+          }}
+        >
+          Import from Google Form
+        </h3>
+        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 4px" }}>
+          <strong>How to use:</strong>
+        </p>
+        <ol
+          style={{
+            fontSize: 12,
+            color: "#64748b",
+            margin: "0 0 14px",
+            paddingLeft: 18,
+            lineHeight: 1.8,
+          }}
+        >
+          <li>Open your Google Form in a browser</li>
+          <li>
+            Switch to <strong>Preview</strong> mode (eye icon)
+          </li>
+          <li>Select all text (Ctrl+A) and copy (Ctrl+C)</li>
+          <li>Paste it below</li>
+        </ol>
+        <textarea
+          className="fc-input fc-textarea"
+          style={{ height: 180, marginBottom: 10 }}
+          placeholder="Paste Google Form text here…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {error && (
+          <p style={{ fontSize: 12, color: "#ef4444", margin: "0 0 10px" }}>
+            {error}
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              flex: 1,
+              padding: "10px",
+              background: "#f8fafc",
+              border: "1.5px solid #e2e8f0",
+              borderRadius: 9,
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#64748b",
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleImport}
+            style={{
+              flex: 1,
+              padding: "10px",
+              background: "#0f172a",
+              border: "none",
+              borderRadius: 9,
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Import Questions
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 /* ─── sub-components ───────────────────────────────── */
@@ -619,21 +789,23 @@ const PollOptionsEditor = ({ value, onChange }) => {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean)
-    : [""];
+    : [];
 
   const updateOption = (idx, newVal) => {
     const updated = [...options];
     updated[idx] = newVal;
-    onChange(updated.join(", "));
+    onChange(updated.filter(Boolean).join(", "));
   };
 
   const addOption = () => {
-    onChange([...options, ""].join(", "));
+    const updated = [...options, ""];
+    // We need to track empty-in-progress options, so store as array state
+    onChange(updated.join(", "));
   };
 
   const removeOption = (idx) => {
     const updated = options.filter((_, i) => i !== idx);
-    onChange(updated.length ? updated.join(", ") : "");
+    onChange(updated.join(", "));
   };
 
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -704,6 +876,11 @@ const PollOptionsEditor = ({ value, onChange }) => {
           </button>
         </div>
       ))}
+      {options.length === 0 && (
+        <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
+          No options yet. Click "Add Option" to begin.
+        </p>
+      )}
       <button
         type="button"
         onClick={addOption}
@@ -1365,7 +1542,7 @@ const NominationTableBuilder = ({ value, onChange }) => {
       {/* Enable toggle */}
       <div className="ntb-toggle-row">
         <div className="ntb-toggle-info">
-          <span className="ntb-toggle-label">📋 Nomination / Roster Table</span>
+          <span className="ntb-toggle-label">📋 Nomination Table</span>
           <span className="ntb-toggle-desc">
             Add a structured table to your form — ideal for nomination,
             registration, or roster collection.
@@ -1427,7 +1604,9 @@ const NominationTableBuilder = ({ value, onChange }) => {
           </div>
           <div className="fc-field-grid" style={{ marginBottom: 14 }}>
             <div className="fc-field">
-              <label className="fc-label">Institution Field Label</label>
+              <label className="fc-label">
+                A Label to show the Respondent's what to fill
+              </label>
               <input
                 className="fc-input"
                 placeholder="Institution Name"
@@ -1438,7 +1617,9 @@ const NominationTableBuilder = ({ value, onChange }) => {
               />
             </div>
             <div className="fc-field">
-              <label className="fc-label">Coordinator Field Label</label>
+              <label className="fc-label">
+                A Label to show the Respondent's what to fill
+              </label>
               <input
                 className="fc-input"
                 placeholder="Institution Coordinator / Teacher's Name"
@@ -1676,8 +1857,176 @@ const NominationTableBuilder = ({ value, onChange }) => {
   );
 };
 
+const ParagraphEditor = ({ value, onChange }) => {
+  const ref = useRef(null);
+
+  const exec = (cmd, val = null) => {
+    document.execCommand(cmd, false, val);
+    ref.current?.focus();
+    onChange(ref.current?.innerHTML || "");
+  };
+
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== value) {
+      ref.current.innerHTML = value || "";
+    }
+  }, []); // only on mount
+
+  const btnStyle = (active) => ({
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    background: active ? "#0f172a" : "#f1f5f9",
+    color: active ? "#fff" : "#475569",
+    border: "1px solid #e2e8f0",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontFamily: "serif",
+  });
+
+  return (
+    <div
+      style={{
+        border: "1.5px solid #e8ecf0",
+        borderRadius: 10,
+        overflow: "hidden",
+        background: "#fff",
+      }}
+    >
+      {/* Toolbar */}
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          flexWrap: "wrap",
+          padding: "8px 10px",
+          background: "#f8fafc",
+          borderBottom: "1px solid #e8ecf0",
+        }}
+      >
+        {[
+          { cmd: "bold", label: <strong>B</strong> },
+          { cmd: "italic", label: <em>I</em> },
+          {
+            cmd: "underline",
+            label: <span style={{ textDecoration: "underline" }}>U</span>,
+          },
+        ].map(({ cmd, label }) => (
+          <button
+            key={cmd}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec(cmd);
+            }}
+            style={btnStyle(false)}
+          >
+            {label}
+          </button>
+        ))}
+        <div style={{ width: 1, background: "#e2e8f0", margin: "0 4px" }} />
+        {[
+          { cmd: "justifyLeft", label: "≡L" },
+          { cmd: "justifyCenter", label: "≡C" },
+          { cmd: "justifyRight", label: "≡R" },
+          { cmd: "justifyFull", label: "≡J" },
+        ].map(({ cmd, label }) => (
+          <button
+            key={cmd}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec(cmd);
+            }}
+            style={{ ...btnStyle(false), fontSize: 10 }}
+          >
+            {label}
+          </button>
+        ))}
+        <div style={{ width: 1, background: "#e2e8f0", margin: "0 4px" }} />
+        {[
+          { cmd: "insertUnorderedList", label: "• List" },
+          { cmd: "insertOrderedList", label: "1. List" },
+        ].map(({ cmd, label }) => (
+          <button
+            key={cmd}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec(cmd);
+            }}
+            style={{
+              ...btnStyle(false),
+              width: "auto",
+              padding: "0 8px",
+              fontSize: 10,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+        <div style={{ width: 1, background: "#e2e8f0", margin: "0 4px" }} />
+        <select
+          style={{
+            fontSize: 11,
+            border: "1px solid #e2e8f0",
+            borderRadius: 5,
+            padding: "2px 4px",
+            background: "#f8fafc",
+            color: "#475569",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            exec("fontSize", e.target.value);
+            e.target.value = "";
+          }}
+          defaultValue=""
+        >
+          <option value="" disabled>
+            Size
+          </option>
+          {[1, 2, 3, 4, 5, 6, 7].map((s) => (
+            <option key={s} value={s}>
+              {["8", "10", "12", "14", "18", "24", "36"][s - 1]}px
+            </option>
+          ))}
+        </select>
+      </div>
+      {/* Editable area */}
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => onChange(ref.current?.innerHTML || "")}
+        style={{
+          minHeight: 80,
+          padding: "10px 12px",
+          fontSize: 13,
+          color: "#0f172a",
+          outline: "none",
+          lineHeight: 1.6,
+          fontFamily: "'DM Sans', system-ui",
+        }}
+        data-placeholder="Type your paragraph/instructions here…"
+      />
+      <style>{`
+        [contenteditable]:empty:before {
+          content: attr(data-placeholder);
+          color: #94a3b8;
+          pointer-events: none;
+        }
+      `}</style>
+    </div>
+  );
+};
+
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
+  const [showGFImporter, setShowGFImporter] = useState(false);
   const { user } = useAuth();
   const basePath =
     user?.role === "super_admin"
@@ -1920,19 +2269,20 @@ const FormCreator = () => {
 
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
-  // REPLACE WITH
   const buildContentPayload = () => ({
     title: form.title,
     displayTitle: form.showTitleToUser ? form.displayTitle || form.title : "",
     showTitleToUser: form.showTitleToUser,
     description: form.description,
     formType: form.formType,
-    // Include visibility + respondents so slug is generated correctly on first save
     visibility: form.visibility,
     allowedRespondents: splitList(form.allowedRespondentsText),
     collectsName: form.collectsName,
+    nameRequired: form.nameRequired,
     collectsPhone: form.collectsPhone,
     phoneRequired: form.phoneRequired,
+    collectsEmail: form.collectsEmail,
+    emailRequired: form.emailRequired,
     collectsCompanyDetails: form.collectsCompanyDetails,
     companyDetailsRequired: form.companyDetailsRequired,
     personalizations: form.personalizations,
@@ -1942,6 +2292,10 @@ const FormCreator = () => {
         ...q,
         options: splitList(q.optionsText),
         answerTemplates: splitList(q.answerTemplatesText),
+        allowCustomText:
+          q.type === "multiple-choice" || q.type === "single-choice"
+            ? !!q.allowCustomText
+            : false,
       })),
     nominationTable: {
       enabled: form.nominationTable.enabled,
@@ -2143,6 +2497,18 @@ const FormCreator = () => {
 
   return (
     <>
+      {showGFImporter && (
+        <GoogleFormImporter
+          onImport={(qs) => {
+            setForm((c) => ({ ...c, questions: [...qs, ...c.questions] }));
+            setIsDirty(true);
+            setShowGFImporter(false);
+            setTplToast(`${qs.length} questions imported!`);
+            setTimeout(() => setTplToast(""), 3000);
+          }}
+          onClose={() => setShowGFImporter(false)}
+        />
+      )}
       <style>{CSS}</style>
 
       {tplToast && (
@@ -2572,6 +2938,7 @@ const FormCreator = () => {
                       </button>
                     </div>
                   </div>
+
                   <div className="fc-field-grid">
                     <div className="fc-field">
                       <label className="fc-label">
@@ -2607,6 +2974,8 @@ const FormCreator = () => {
                         <option value="survey">📊 Survey</option>
                         <option value="event">🎫 Event Feedback</option>
                         <option value="internal">🏢 Internal Feedback</option>
+                        <option value="assessment">📝 Assessment Form</option>
+                        <option value="nomination">🏆 Nomination Form</option>
                       </select>
                     </div>
 
@@ -2676,6 +3045,121 @@ const FormCreator = () => {
                         placeholder="Briefly describe the purpose of this form…"
                       />
                     </div>
+                    <div className="fc-field fc-field--full">
+                      <label className="fc-label">
+                        Form Header Image{" "}
+                        <span className="fc-hint">
+                          (optional, shown to respondents at top)
+                        </span>
+                      </label>
+                      {form.imageUrl ? (
+                        <div
+                          style={{
+                            position: "relative",
+                            display: "inline-block",
+                          }}
+                        >
+                          <img
+                            src={form.imageUrl}
+                            alt="Form header"
+                            style={{
+                              width: "100%",
+                              maxHeight: 160,
+                              objectFit: "cover",
+                              borderRadius: 10,
+                              border: "1.5px solid #e8ecf0",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateField("imageUrl", "")}
+                            style={{
+                              position: "absolute",
+                              top: 8,
+                              right: 8,
+                              width: 26,
+                              height: 26,
+                              borderRadius: "50%",
+                              background: "rgba(0,0,0,0.6)",
+                              border: "none",
+                              color: "#fff",
+                              cursor: "pointer",
+                              fontSize: 14,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 10,
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <label
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 7,
+                              background: "#f8fafc",
+                              border: "1.5px dashed #cbd5e1",
+                              borderRadius: 9,
+                              padding: "9px 16px",
+                              cursor: "pointer",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "#64748b",
+                            }}
+                          >
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            >
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                            Upload Image
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = (ev) =>
+                                  updateField("imageUrl", ev.target.result);
+                                reader.readAsDataURL(file);
+                              }}
+                            />
+                          </label>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                            or paste URL:
+                          </span>
+                          <input
+                            className="fc-input"
+                            style={{ flex: 1, minWidth: 200, fontSize: 12 }}
+                            placeholder="https://example.com/image.jpg"
+                            value={form.imageUrl || ""}
+                            onChange={(e) =>
+                              updateField("imageUrl", e.target.value)
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="fc-divider" />
@@ -2685,9 +3169,13 @@ const FormCreator = () => {
                   <div className="fc-chip-row">
                     {[
                       ["collectsName", "👤 Collect Name"],
+                      ["nameRequired", "🔒 Name Required"],
                       ["collectsPhone", "📱 Collect Phone"],
                       ["phoneRequired", "🔒 Phone Required"],
+                      ["collectsEmail", "📧 Collect Email"],
+                      ["emailRequired", "🔒 Email Required"],
                       ["collectsCompanyDetails", "🏢 Company Details"],
+                      ["companyDetailsRequired", "🔒 Company Required"],
                       ["singleSession", "🔐 Single Session"],
                     ].map(([key, lbl]) => (
                       <button
@@ -3278,11 +3766,13 @@ const FormCreator = () => {
                     onDelete={handleDeleteTemplate}
                   />
 
-                  {/* ── Nomination Table Builder ── */}
-                  <NominationTableBuilder
-                    value={form.nominationTable}
-                    onChange={(val) => updateField("nominationTable", val)}
-                  />
+                  {/* ── Nomination Table Builder — only for Nomination Form type ── */}
+                  {form.formType === "nomination" && (
+                    <NominationTableBuilder
+                      value={form.nominationTable}
+                      onChange={(val) => updateField("nominationTable", val)}
+                    />
+                  )}
 
                   <div className="fc-divider" style={{ margin: "16px 0" }} />
 
@@ -3325,6 +3815,14 @@ const FormCreator = () => {
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                     Add Question
+                  </button>
+                  <button
+                    type="button"
+                    className="fc-ghost-btn"
+                    onClick={() => setShowGFImporter(true)}
+                    style={{ fontSize: 11, padding: "7px 12px" }}
+                  >
+                    📋 Import from Google Form
                   </button>
 
                   {/* ── Question list ── */}
@@ -3413,75 +3911,99 @@ const FormCreator = () => {
                           </div>
                         </div>
 
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            flexWrap: "wrap",
-                            padding: "4px 0",
-                          }}
-                        >
-                          <input
-                            className="fc-input"
-                            required
-                            style={{
-                              flex: "1 1 200px",
-                              minWidth: 140,
-                              fontSize: 13,
-                            }}
-                            value={q.prompt}
-                            onChange={(e) =>
-                              updateQuestion(idx, "prompt", e.target.value)
-                            }
-                            placeholder="Type your question…"
-                          />
-                          <label
+                        {q.type === "paragraph" ? (
+                          <div style={{ padding: "4px 0" }}>
+                            <label
+                              className="fc-label"
+                              style={{ marginBottom: 6, display: "block" }}
+                            >
+                              Paragraph Content
+                            </label>
+                            <ParagraphEditor
+                              value={q.prompt}
+                              onChange={(val) =>
+                                updateQuestion(idx, "prompt", val)
+                              }
+                            />
+                          </div>
+                        ) : (
+                          <div
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              gap: 5,
-                              cursor: "pointer",
-                              flexShrink: 0,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: "#64748b",
-                              whiteSpace: "nowrap",
+                              gap: 8,
+                              flexWrap: "wrap",
+                              padding: "4px 0",
                             }}
                           >
                             <input
-                              type="checkbox"
-                              checked={q.required}
-                              onChange={(e) =>
-                                updateQuestion(
-                                  idx,
-                                  "required",
-                                  e.target.checked,
-                                )
-                              }
+                              className="fc-input"
+                              required
                               style={{
-                                width: 14,
-                                height: 14,
-                                accentColor: "#3b82f6",
-                                cursor: "pointer",
+                                flex: "1 1 200px",
+                                minWidth: 140,
+                                fontSize: 13,
                               }}
+                              value={q.prompt}
+                              onChange={(e) =>
+                                updateQuestion(idx, "prompt", e.target.value)
+                              }
+                              placeholder="Type your question…"
                             />
-                            Required
-                          </label>
-                          <select
-                            className="fc-input"
-                            style={{ width: "auto", flexShrink: 0 }}
-                            value={q.type}
-                            onChange={(e) =>
-                              updateQuestion(idx, "type", e.target.value)
-                            }
-                          >
-                            <option value="text">✍️ Text</option>
-                            <option value="rating">⭐ Rating</option>
-                            <option value="single-choice">🔘 Single</option>
-                            <option value="multiple-choice">☑️ Multi</option>
-                          </select>
-                        </div>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 5,
+                                cursor: "pointer",
+                                flexShrink: 0,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: "#64748b",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={q.required}
+                                onChange={(e) =>
+                                  updateQuestion(
+                                    idx,
+                                    "required",
+                                    e.target.checked,
+                                  )
+                                }
+                                style={{
+                                  width: 14,
+                                  height: 14,
+                                  accentColor: "#3b82f6",
+                                  cursor: "pointer",
+                                }}
+                              />
+                              Required
+                            </label>
+                            <select
+                              className="fc-input"
+                              style={{ width: "auto", flexShrink: 0 }}
+                              value={q.type}
+                              onChange={(e) =>
+                                updateQuestion(idx, "type", e.target.value)
+                              }
+                            >
+                              <option value="text">✍️ Text Answer</option>
+                              <option value="rating">⭐ Rating</option>
+                              <option value="single-choice">
+                                🔘 Single Choice
+                              </option>
+                              <option value="multiple-choice">
+                                ☑️ Multi Choice
+                              </option>
+                              <option value="paragraph">
+                                📝 Text Block (no answer)
+                              </option>
+                            </select>
+                          </div>
+                        )}
 
                         {(q.type === "single-choice" ||
                           q.type === "multiple-choice") && (
@@ -3503,28 +4025,69 @@ const FormCreator = () => {
                                 updateQuestion(idx, "optionsText", val)
                               }
                             />
+                            <div
+                              style={{
+                                marginTop: 10,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <label
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  color: "#64748b",
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={q.allowCustomText !== false}
+                                  onChange={(e) =>
+                                    updateQuestion(
+                                      idx,
+                                      "allowCustomText",
+                                      e.target.checked,
+                                    )
+                                  }
+                                  style={{
+                                    width: 13,
+                                    height: 13,
+                                    accentColor: "#7c3aed",
+                                    cursor: "pointer",
+                                  }}
+                                />
+                                Allow "add your own answer" text box
+                              </label>
+                            </div>
                           </div>
                         )}
 
-                        <div style={{ marginTop: 10 }}>
-                          <label className="fc-label">
-                            Suggested Answer Templates{" "}
-                            <span className="fc-hint">(comma-separated)</span>
-                          </label>
-                          <textarea
-                            className="fc-input fc-textarea"
-                            style={{ height: 52 }}
-                            placeholder="Great session!, The speaker was excellent…"
-                            value={q.answerTemplatesText}
-                            onChange={(e) =>
-                              updateQuestion(
-                                idx,
-                                "answerTemplatesText",
-                                e.target.value,
-                              )
-                            }
-                          />
-                        </div>
+                        {q.type !== "paragraph" && (
+                          <div style={{ marginTop: 10 }}>
+                            <label className="fc-label">
+                              Suggested Answer Templates{" "}
+                              <span className="fc-hint">(comma-separated)</span>
+                            </label>
+                            <textarea
+                              className="fc-input fc-textarea"
+                              style={{ height: 52 }}
+                              placeholder="Great session!, The speaker was excellent…"
+                              value={q.answerTemplatesText}
+                              onChange={(e) =>
+                                updateQuestion(
+                                  idx,
+                                  "answerTemplatesText",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
 

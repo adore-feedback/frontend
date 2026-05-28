@@ -463,7 +463,7 @@ const EmailIdentityGate = ({
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             <span>
-              Secured by <strong>Simtrak Feedback Hub</strong>
+              Secured by <strong>Simtrak Feedback Hub - OneCollect</strong>
             </span>
           </div>
         </div>
@@ -596,7 +596,7 @@ const EmailIdentityGate = ({
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
           <span>
-            Secured by <strong>Simtrak Feedback Hub</strong>
+            Secured by <strong>Simtrak Feedback Hub - OneCollect</strong>
           </span>
         </div>
       </div>
@@ -639,7 +639,7 @@ const StatusScreen = ({ icon, iconBg, children }) => (
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
         <span>
-          <strong>Simtrak Feedback Hub</strong>
+          <strong>Simtrak Feedback Hub - OneCollect</strong>
         </span>
       </div>
     </div>
@@ -855,7 +855,10 @@ const NominationTableSection = ({
   nominationTable,
   tableRows,
   setTableRows,
-  respondent,
+  ntInstitution,
+  setNtInstitution,
+  ntCoordinator,
+  setNtCoordinator,
   isPersonalizedLink,
   gateVerified,
 }) => {
@@ -868,12 +871,11 @@ const NominationTableSection = ({
     );
   };
 
-  /* Institution & coordinator values:
-     - restricted / personalized → prefilled from respondent, locked
-     - public → respondent types them in                               */
-  const institutionValue = respondent.companyName || "";
-  const coordinatorValue = respondent.name || "";
-  const isLocked = isPersonalizedLink || gateVerified;
+  const institutionValue = ntInstitution;
+  const coordinatorValue = ntCoordinator;
+  const isLocked =
+    (isPersonalizedLink || gateVerified) &&
+    (Boolean(ntInstitution) || Boolean(ntCoordinator));
 
   return (
     <section style={S.card}>
@@ -936,7 +938,10 @@ const NominationTableSection = ({
             placeholder="Enter institution name"
             value={institutionValue}
             readOnly={isLocked && Boolean(institutionValue)}
-            onChange={() => {}}
+            onChange={(e) => {
+              if (!(isLocked && Boolean(institutionValue)))
+                setNtInstitution(e.target.value);
+            }}
           />
           {isLocked && institutionValue && (
             <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
@@ -961,7 +966,10 @@ const NominationTableSection = ({
             placeholder="Enter coordinator name"
             value={coordinatorValue}
             readOnly={isLocked && Boolean(coordinatorValue)}
-            onChange={() => {}}
+            onChange={(e) => {
+              if (!(isLocked && Boolean(coordinatorValue)))
+                setNtCoordinator(e.target.value);
+            }}
           />
           {isLocked && coordinatorValue && (
             <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
@@ -1056,6 +1064,8 @@ const PublicFeedbackForm = () => {
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [tableRows, setTableRows] = useState([]);
   const [tokenError, setTokenError] = useState("");
+  const [ntInstitution, setNtInstitution] = useState("");
+  const [ntCoordinator, setNtCoordinator] = useState("");
 
   useEffect(() => {
     const stored = getStoredSubmission(formId);
@@ -1103,6 +1113,8 @@ const PublicFeedbackForm = () => {
             companyName: serverPrefill.companyName || "",
             companyDetails: "",
           });
+          setNtInstitution(serverPrefill.companyName || "");
+          setNtCoordinator(serverPrefill.name || "");
           setGateState("verified");
         } else if (accessEmail) {
           const prefillName =
@@ -1123,6 +1135,8 @@ const PublicFeedbackForm = () => {
             accessEmail,
             prefillName || accessName || gateName,
           );
+          setNtInstitution(serverPrefill.companyName || "");
+          setNtCoordinator(prefillName || "");
           setGateState("verified");
         } else {
           const savedEmail = getSavedRespondentEmail();
@@ -1286,8 +1300,8 @@ const PublicFeedbackForm = () => {
         nominationTableData: {
           heading: form.nominationTable.heading,
           subHeading: form.nominationTable.subHeading,
-          institutionName: respondent.companyName || "",
-          coordinatorName: respondent.name || "",
+          institutionName: ntInstitution || "",
+          coordinatorName: ntCoordinator || "",
           columns: form.nominationTable.columns,
           rows: tableRows,
         },
@@ -1434,7 +1448,7 @@ const PublicFeedbackForm = () => {
         }
       >
         <h1 style={{ ...S.gateTitle, color: "#111827" }}>
-          {respondent.name
+          {!isAnonymous && respondent.name
             ? `Thank you, ${respondent.name.split(" ")[0]}!`
             : "Thank you!"}
         </h1>
@@ -1513,6 +1527,29 @@ const PublicFeedbackForm = () => {
 
         <div style={S.heroContent}>
           <div style={S.simtrakBrand}>
+            {form.imageUrl && (
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: 600,
+                  margin: "0 auto 20px",
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  boxShadow: "0 8px 30px rgba(0,0,0,0.3)",
+                }}
+              >
+                <img
+                  src={form.imageUrl}
+                  alt="Form header"
+                  style={{
+                    width: "100%",
+                    maxHeight: 220,
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              </div>
+            )}
             <div style={S.simtrakLogoMark}>
               <svg
                 width="16"
@@ -1526,7 +1563,7 @@ const PublicFeedbackForm = () => {
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
             </div>
-            <span style={S.simtrakName}>Simtrak Feedback Hub</span>
+            <span style={S.simtrakName}>Simtrak Feedback Hub - OneCollect</span>
           </div>
 
           <div style={S.typeBadge}>
@@ -1730,22 +1767,29 @@ const PublicFeedbackForm = () => {
                   <div style={S.fieldGroup}>
                     <label style={S.label}>
                       Full Name
-                      <span
-                        style={{
-                          color: "#9ca3af",
-                          fontWeight: 500,
-                          marginLeft: 4,
-                          fontSize: 10,
-                          textTransform: "none",
-                        }}
-                      >
-                        (optional)
-                      </span>
+                      {form.nameRequired ? (
+                        <span style={{ color: "#ef4444", marginLeft: 4 }}>
+                          *
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            color: "#9ca3af",
+                            fontWeight: 500,
+                            marginLeft: 4,
+                            fontSize: 10,
+                            textTransform: "none",
+                          }}
+                        >
+                          (optional)
+                        </span>
+                      )}
                     </label>
                     <input
                       style={S.input}
                       placeholder="Your full name"
                       value={respondent.name}
+                      required={form.nameRequired}
                       onChange={(e) =>
                         setRespondent({ ...respondent, name: e.target.value })
                       }
@@ -1763,7 +1807,7 @@ const PublicFeedbackForm = () => {
                 <div style={S.fieldGroup}>
                   <label style={S.label}>
                     Email Address{" "}
-                    {isRestricted && (
+                    {(isRestricted || form.emailRequired) && (
                       <span style={{ color: "#ef4444" }}>*</span>
                     )}
                   </label>
@@ -1905,333 +1949,427 @@ const PublicFeedbackForm = () => {
               nominationTable={form.nominationTable}
               tableRows={tableRows}
               setTableRows={setTableRows}
-              respondent={respondent}
+              ntInstitution={ntInstitution}
+              setNtInstitution={setNtInstitution}
+              ntCoordinator={ntCoordinator}
+              setNtCoordinator={setNtCoordinator}
               isPersonalizedLink={isPersonalizedLink}
               gateVerified={gateState === "verified"}
             />
           )}
 
           {/* Questions */}
-          {(form.questions || []).map((q, idx) => (
-            <section
-              key={q.id || idx}
-              style={{
-                ...S.card,
-                ...(activeQ === (q.id || idx) ? S.cardActive : {}),
-              }}
-              onClick={() => setActiveQ(q.id || idx)}
-            >
-              <div
+          {(form.questions || []).map((q, idx) => {
+            const isParagraph = q.type === "paragraph";
+
+            return (
+              <section
+                key={q.id || idx}
                 style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 14,
-                  marginBottom: 18,
+                  ...S.card,
+                  ...(activeQ === (q.id || idx) ? S.cardActive : {}),
+
+                  // Optional custom spacing for paragraph blocks
+                  ...(isParagraph
+                    ? {
+                        paddingTop: 18,
+                        paddingBottom: 18,
+                      }
+                    : {}),
                 }}
+                onClick={() => setActiveQ(q.id || idx)}
               >
-                <div style={S.qBadge}>{idx + 1}</div>
-                <label style={S.qLabel}>
-                  {q.prompt}
-                  {q.required && (
-                    <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>
-                  )}
-                </label>
-              </div>
+                {/* Hide badge + label for paragraph type */}
+                {!isParagraph && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 14,
+                      marginBottom: 18,
+                    }}
+                  >
+                    <div style={S.qBadge}>{idx + 1}</div>
 
-              {q.type === "rating" && (
-                <StarRating
-                  value={answers[q.id] || ""}
-                  onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
-                />
-              )}
+                    <label style={S.qLabel}>
+                      {q.prompt}
 
-              {q.type === "text" && (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
-                >
-                  <textarea
-                    className="form-input"
-                    style={S.textarea}
-                    required={q.required}
-                    value={answers[q.id] || ""}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, [q.id]: e.target.value })
-                    }
-                    placeholder="Share your thoughts…"
+                      {q.required && (
+                        <span style={{ color: "#ef4444", marginLeft: 4 }}>
+                          *
+                        </span>
+                      )}
+                    </label>
+                  </div>
+                )}
+
+                {/* Paragraph content itself */}
+                {isParagraph && (
+                  <div
+                    dangerouslySetInnerHTML={{ __html: q.prompt }}
+                    style={{
+                      fontSize: 14,
+                      color: "#374151",
+                      lineHeight: 1.75,
+                      fontFamily: "'DM Sans', system-ui",
+                    }}
                   />
-                  {q.answerTemplates?.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 6,
-                        alignItems: "center",
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: "#9ca3af",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.06em",
-                        }}
-                      >
-                        Quick fill:
-                      </span>
-                      {q.answerTemplates.slice(0, 3).map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          style={S.chip}
-                          onClick={() => setAnswers({ ...answers, [q.id]: t })}
-                          className="chip-btn"
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
 
-              {q.type === "single-choice" && (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {(q.options || []).map((opt, optIdx) => {
-                    const selected = answers[q.id] === opt;
-                    const letter = String.fromCharCode(65 + optIdx);
-                    return (
-                      <label
-                        key={opt}
+                {q.type === "rating" && (
+                  <StarRating
+                    value={answers[q.id] || ""}
+                    onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
+                  />
+                )}
+
+                {q.type === "text" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    <textarea
+                      className="form-input"
+                      style={S.textarea}
+                      required={q.required}
+                      value={answers[q.id] || ""}
+                      onChange={(e) =>
+                        setAnswers({ ...answers, [q.id]: e.target.value })
+                      }
+                      placeholder="Share your thoughts…"
+                    />
+                    {q.answerTemplates?.length > 0 && (
+                      <div
                         style={{
-                          ...S.pollRow,
-                          ...(selected ? S.pollRowSelected : {}),
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          alignItems: "center",
                         }}
-                        onClick={() => setAnswers({ ...answers, [q.id]: opt })}
                       >
-                        <div
+                        <span
                           style={{
-                            ...S.pollLetter,
-                            ...(selected ? S.pollLetterSelected : {}),
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: "#9ca3af",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
                           }}
                         >
-                          {letter}
-                        </div>
-                        <input
-                          type="radio"
-                          style={{ display: "none" }}
-                          checked={selected}
-                          onChange={() =>
+                          Quick fill:
+                        </span>
+                        {q.answerTemplates.slice(0, 3).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            style={S.chip}
+                            onClick={() =>
+                              setAnswers({ ...answers, [q.id]: t })
+                            }
+                            className="chip-btn"
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {q.type === "single-choice" && (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    {(q.options || []).map((opt, optIdx) => {
+                      const selected = answers[q.id] === opt;
+                      const letter = String.fromCharCode(65 + optIdx);
+
+                      return (
+                        <label
+                          key={opt}
+                          style={{
+                            ...S.pollRow,
+                            ...(selected ? S.pollRowSelected : {}),
+                          }}
+                          onClick={() =>
                             setAnswers({ ...answers, [q.id]: opt })
                           }
-                        />
-                        <span
-                          style={{
-                            fontSize: 14,
-                            fontWeight: selected ? 600 : 400,
-                            color: selected ? "#111827" : "#374151",
-                            flex: 1,
-                          }}
                         >
-                          {opt}
-                        </span>
-                        {selected && (
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#6366f1"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
+                          <div
+                            style={{
+                              ...S.pollLetter,
+                              ...(selected ? S.pollLetterSelected : {}),
+                            }}
                           >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </label>
-                    );
-                  })}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      margin: "4px 0 2px",
-                    }}
-                  >
-                    <div
-                      style={{ flex: 1, height: 1, background: "#e5e7eb" }}
-                    />
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "#9ca3af",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.07em",
-                      }}
-                    >
-                      or add your own
-                    </span>
-                    <div
-                      style={{ flex: 1, height: 1, background: "#e5e7eb" }}
-                    />
-                  </div>
-                  <textarea
-                    className="form-input"
-                    style={{ ...S.textarea, minHeight: 72 }}
-                    placeholder="Type your own answer or additional details…"
-                    value={answers[`${q.id}_custom`] || ""}
-                    onChange={(e) =>
-                      setAnswers({
-                        ...answers,
-                        [`${q.id}_custom`]: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              )}
+                            {letter}
+                          </div>
 
-              {/* UPDATED: Hybrid multi-select — MCQ checkboxes + free-text textarea */}
-              {q.type === "multiple-choice" && (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {(q.options || []).map((opt, optIdx) => {
-                    const val =
-                      answers[q.id] &&
-                      typeof answers[q.id] === "object" &&
-                      !Array.isArray(answers[q.id])
-                        ? answers[q.id]
-                        : {
-                            selected: Array.isArray(answers[q.id])
-                              ? answers[q.id]
-                              : [],
-                            customText: "",
-                          };
-                    const selected = (val.selected || []).includes(opt);
-                    const letter = String.fromCharCode(65 + optIdx);
-                    const toggle = () => {
-                      const prev = val.selected || [];
-                      const next = prev.includes(opt)
-                        ? prev.filter((x) => x !== opt)
-                        : [...prev, opt];
-                      setAnswers({
-                        ...answers,
-                        [q.id]: { ...val, selected: next },
-                      });
-                    };
-                    return (
-                      <label
-                        key={opt}
-                        style={{
-                          ...S.pollRow,
-                          ...(selected ? S.pollRowSelected : {}),
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          toggle();
-                        }}
-                      >
+                          <input
+                            type="radio"
+                            style={{ display: "none" }}
+                            checked={selected}
+                            onChange={() =>
+                              setAnswers({ ...answers, [q.id]: opt })
+                            }
+                          />
+
+                          <span
+                            style={{
+                              fontSize: 14,
+                              fontWeight: selected ? 600 : 400,
+                              color: selected ? "#111827" : "#374151",
+                              flex: 1,
+                            }}
+                          >
+                            {opt}
+                          </span>
+
+                          {selected && (
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#6366f1"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </label>
+                      );
+                    })}
+
+                    {/* ONLY wrap custom text section */}
+                    {q.allowCustomText !== false && (
+                      <>
                         <div
                           style={{
-                            ...S.pollLetter,
-                            ...(selected ? S.pollLetterSelected : {}),
-                            borderRadius: 5,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            margin: "4px 0 2px",
                           }}
                         >
-                          {letter}
-                        </div>
-                        <input
-                          type="checkbox"
-                          style={{ display: "none" }}
-                          checked={selected}
-                          onChange={() => {}}
-                        />
-                        <span
-                          style={{
-                            fontSize: 14,
-                            fontWeight: selected ? 600 : 400,
-                            color: selected ? "#111827" : "#374151",
-                            flex: 1,
-                          }}
-                        >
-                          {opt}
-                        </span>
-                        {selected && (
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#6366f1"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
+                          <div
+                            style={{
+                              flex: 1,
+                              height: 1,
+                              background: "#e5e7eb",
+                            }}
+                          />
+
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: "#9ca3af",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.07em",
+                            }}
                           >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </label>
-                    );
-                  })}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      margin: "4px 0 2px",
-                    }}
-                  >
-                    <div
-                      style={{ flex: 1, height: 1, background: "#e5e7eb" }}
-                    />
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "#9ca3af",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.07em",
-                      }}
-                    >
-                      or add your own
-                    </span>
-                    <div
-                      style={{ flex: 1, height: 1, background: "#e5e7eb" }}
-                    />
+                            or add your own
+                          </span>
+
+                          <div
+                            style={{
+                              flex: 1,
+                              height: 1,
+                              background: "#e5e7eb",
+                            }}
+                          />
+                        </div>
+
+                        <textarea
+                          className="form-input"
+                          style={{ ...S.textarea, minHeight: 72 }}
+                          placeholder="Type your own answer or additional details…"
+                          value={answers[`${q.id}_custom`] || ""}
+                          onChange={(e) =>
+                            setAnswers({
+                              ...answers,
+                              [`${q.id}_custom`]: e.target.value,
+                            })
+                          }
+                        />
+                      </>
+                    )}
                   </div>
-                  <textarea
-                    className="form-input"
-                    style={{ ...S.textarea, minHeight: 72 }}
-                    placeholder="Type your own answer or additional details…"
-                    value={(() => {
+                )}
+
+                {/* UPDATED: Hybrid multi-select — MCQ checkboxes + free-text textarea */}
+                {q.type === "multiple-choice" && (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    {(q.options || []).map((opt, optIdx) => {
                       const val =
                         answers[q.id] &&
                         typeof answers[q.id] === "object" &&
                         !Array.isArray(answers[q.id])
                           ? answers[q.id]
-                          : { customText: "" };
-                      return val.customText || "";
-                    })()}
-                    onChange={(e) => {
-                      const val =
-                        answers[q.id] &&
-                        typeof answers[q.id] === "object" &&
-                        !Array.isArray(answers[q.id])
-                          ? answers[q.id]
-                          : { selected: [], customText: "" };
-                      setAnswers({
-                        ...answers,
-                        [q.id]: { ...val, customText: e.target.value },
-                      });
-                    }}
-                  />
-                </div>
-              )}
-            </section>
-          ))}
+                          : {
+                              selected: Array.isArray(answers[q.id])
+                                ? answers[q.id]
+                                : [],
+                              customText: "",
+                            };
+
+                      const selected = (val.selected || []).includes(opt);
+                      const letter = String.fromCharCode(65 + optIdx);
+
+                      const toggle = () => {
+                        const prev = val.selected || [];
+
+                        const next = prev.includes(opt)
+                          ? prev.filter((x) => x !== opt)
+                          : [...prev, opt];
+
+                        setAnswers({
+                          ...answers,
+                          [q.id]: { ...val, selected: next },
+                        });
+                      };
+
+                      return (
+                        <label
+                          key={opt}
+                          style={{
+                            ...S.pollRow,
+                            ...(selected ? S.pollRowSelected : {}),
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            toggle();
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...S.pollLetter,
+                              ...(selected ? S.pollLetterSelected : {}),
+                              borderRadius: 5,
+                            }}
+                          >
+                            {letter}
+                          </div>
+
+                          <input
+                            type="checkbox"
+                            style={{ display: "none" }}
+                            checked={selected}
+                            onChange={() => {}}
+                          />
+
+                          <span
+                            style={{
+                              fontSize: 14,
+                              fontWeight: selected ? 600 : 400,
+                              color: selected ? "#111827" : "#374151",
+                              flex: 1,
+                            }}
+                          >
+                            {opt}
+                          </span>
+
+                          {selected && (
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#6366f1"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </label>
+                      );
+                    })}
+
+                    {/* ONLY wrap custom textarea section */}
+                    {q.allowCustomText !== false && (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            margin: "4px 0 2px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              flex: 1,
+                              height: 1,
+                              background: "#e5e7eb",
+                            }}
+                          />
+
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: "#9ca3af",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.07em",
+                            }}
+                          >
+                            or add your own
+                          </span>
+
+                          <div
+                            style={{
+                              flex: 1,
+                              height: 1,
+                              background: "#e5e7eb",
+                            }}
+                          />
+                        </div>
+
+                        <textarea
+                          className="form-input"
+                          style={{ ...S.textarea, minHeight: 72 }}
+                          placeholder="Type your own answer or additional details…"
+                          value={(() => {
+                            const val =
+                              answers[q.id] &&
+                              typeof answers[q.id] === "object" &&
+                              !Array.isArray(answers[q.id])
+                                ? answers[q.id]
+                                : { customText: "" };
+
+                            return val.customText || "";
+                          })()}
+                          onChange={(e) => {
+                            const val =
+                              answers[q.id] &&
+                              typeof answers[q.id] === "object" &&
+                              !Array.isArray(answers[q.id])
+                                ? answers[q.id]
+                                : { selected: [], customText: "" };
+
+                            setAnswers({
+                              ...answers,
+                              [q.id]: {
+                                ...val,
+                                customText: e.target.value,
+                              },
+                            });
+                          }}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })}
 
           {status.type === "error" && (
             <div style={S.errorBox}>
@@ -2279,7 +2417,9 @@ const PublicFeedbackForm = () => {
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             <span>
-              <strong style={{ color: "#6366f1" }}>Simtrak Feedback Hub</strong>{" "}
+              <strong style={{ color: "#6366f1" }}>
+                Simtrak Feedback Hub - OneCollect
+              </strong>{" "}
               · Responses are private and confidential
             </span>
           </div>
