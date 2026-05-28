@@ -20,6 +20,7 @@ const emptyQuestion = () => ({
   optionsText: "",
   answerTemplatesText: "",
   allowCustomText: true,
+  imageUrl: "",
 });
 
 const splitList = (v) =>
@@ -784,35 +785,50 @@ const SavedTemplatesPanel = ({ savedTemplates, onUse, onDelete }) => {
 };
 
 const PollOptionsEditor = ({ value, onChange }) => {
-  const options = value
-    ? value
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
+  const parseOpts = (v) =>
+    v
+      ? v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
+  const [localOptions, setLocalOptions] = useState(() => parseOpts(value));
+  const prevRef = useRef(value);
+
+  useEffect(() => {
+    if (value !== prevRef.current) {
+      prevRef.current = value;
+      setLocalOptions(parseOpts(value));
+    }
+  }, [value]);
+
+  const commitToParent = (opts) => {
+    onChange(opts.filter((o) => o.trim() !== "").join(", "));
+  };
 
   const updateOption = (idx, newVal) => {
-    const updated = [...options];
+    const updated = [...localOptions];
     updated[idx] = newVal;
-    onChange(updated.filter(Boolean).join(", "));
+    setLocalOptions(updated);
+    // Don't commit mid-edit; commit on blur to avoid re-render stealing focus
   };
 
-  const addOption = () => {
-    const updated = [...options, ""];
-    // We need to track empty-in-progress options, so store as array state
-    onChange(updated.join(", "));
-  };
+  const handleBlur = () => commitToParent(localOptions);
+
+  const addOption = () => setLocalOptions((prev) => [...prev, ""]);
 
   const removeOption = (idx) => {
-    const updated = options.filter((_, i) => i !== idx);
-    onChange(updated.join(", "));
+    const updated = localOptions.filter((_, i) => i !== idx);
+    setLocalOptions(updated);
+    commitToParent(updated);
   };
 
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {options.map((opt, idx) => (
+      {localOptions.map((opt, idx) => (
         <div
           key={idx}
           style={{ display: "flex", alignItems: "center", gap: 8 }}
@@ -841,23 +857,24 @@ const PollOptionsEditor = ({ value, onChange }) => {
             placeholder={`Option ${letters[idx] || idx + 1}`}
             value={opt}
             onChange={(e) => updateOption(idx, e.target.value)}
+            onBlur={handleBlur}
           />
           <button
             type="button"
             onClick={() => removeOption(idx)}
-            disabled={options.length === 1}
+            disabled={localOptions.length === 1}
             style={{
               width: 26,
               height: 26,
               borderRadius: 6,
               background: "transparent",
               border: "1px solid #e8ecf0",
-              cursor: options.length === 1 ? "not-allowed" : "pointer",
+              cursor: localOptions.length === 1 ? "not-allowed" : "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               color: "#ef4444",
-              opacity: options.length === 1 ? 0.3 : 1,
+              opacity: localOptions.length === 1 ? 0.3 : 1,
               flexShrink: 0,
             }}
           >
@@ -876,7 +893,7 @@ const PollOptionsEditor = ({ value, onChange }) => {
           </button>
         </div>
       ))}
-      {options.length === 0 && (
+      {localOptions.length === 0 && (
         <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
           No options yet. Click "Add Option" to begin.
         </p>
@@ -897,7 +914,6 @@ const PollOptionsEditor = ({ value, onChange }) => {
           color: "#64748b",
           cursor: "pointer",
           fontFamily: "'DM Sans', system-ui",
-          transition: "all 0.15s",
           alignSelf: "flex-start",
         }}
       >
@@ -934,7 +950,6 @@ const MONTHS = [
   "Nov",
   "Dec",
 ];
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 const DateTimePicker = ({ value, onChange, label, hint, required }) => {
@@ -1859,26 +1874,52 @@ const NominationTableBuilder = ({ value, onChange }) => {
 
 const ParagraphEditor = ({ value, onChange }) => {
   const ref = useRef(null);
+  const [activeFormats, setActiveFormats] = useState({});
+
+  const updateActiveFormats = useCallback(() => {
+    try {
+      setActiveFormats({
+        bold:               document.queryCommandState("bold"),
+        italic:             document.queryCommandState("italic"),
+        underline:          document.queryCommandState("underline"),
+        justifyLeft:        document.queryCommandState("justifyLeft"),
+        justifyCenter:      document.queryCommandState("justifyCenter"),
+        justifyRight:       document.queryCommandState("justifyRight"),
+        justifyFull:        document.queryCommandState("justifyFull"),
+        insertUnorderedList:document.queryCommandState("insertUnorderedList"),
+        insertOrderedList:  document.queryCommandState("insertOrderedList"),
+      });
+    } catch {
+      // queryCommandState throws in some contexts — safe to ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", updateActiveFormats);
+    return () => document.removeEventListener("selectionchange", updateActiveFormats);
+  }, [updateActiveFormats]);
 
   const exec = (cmd, val = null) => {
     document.execCommand(cmd, false, val);
     ref.current?.focus();
     onChange(ref.current?.innerHTML || "");
+    setTimeout(updateActiveFormats, 0); // let execCommand settle first
   };
 
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== value) {
       ref.current.innerHTML = value || "";
     }
-  }, []); // only on mount
+  }, []); // mount only
 
-  const btnStyle = (active) => ({
+  // btnStyle now takes the command key and reads live state
+  const btnStyle = (cmd) => ({
     width: 28,
     height: 28,
     borderRadius: 6,
-    background: active ? "#0f172a" : "#f1f5f9",
-    color: active ? "#fff" : "#475569",
-    border: "1px solid #e2e8f0",
+    background: activeFormats[cmd] ? "#0f172a" : "#f1f5f9",
+    color:      activeFormats[cmd] ? "#fff"    : "#475569",
+    border:     activeFormats[cmd] ? "1px solid #0f172a" : "1px solid #e2e8f0",
     cursor: "pointer",
     fontSize: 12,
     fontWeight: 700,
@@ -1886,143 +1927,132 @@ const ParagraphEditor = ({ value, onChange }) => {
     alignItems: "center",
     justifyContent: "center",
     fontFamily: "serif",
+    transition: "background 0.12s, color 0.12s, border-color 0.12s",
   });
 
   return (
-    <div
-      style={{
-        border: "1.5px solid #e8ecf0",
-        borderRadius: 10,
-        overflow: "hidden",
-        background: "#fff",
-      }}
-    >
+    <div style={{ border: "1.5px solid #e8ecf0", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
       {/* Toolbar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 4,
-          flexWrap: "wrap",
-          padding: "8px 10px",
-          background: "#f8fafc",
-          borderBottom: "1px solid #e8ecf0",
-        }}
-      >
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", padding: "8px 10px", background: "#f8fafc", borderBottom: "1px solid #e8ecf0" }}>
+
+        {/* Bold / Italic / Underline */}
         {[
-          { cmd: "bold", label: <strong>B</strong> },
-          { cmd: "italic", label: <em>I</em> },
-          {
-            cmd: "underline",
-            label: <span style={{ textDecoration: "underline" }}>U</span>,
-          },
-        ].map(({ cmd, label }) => (
+          { cmd: "bold",      label: <strong>B</strong>,                              title: "Bold (Ctrl+B)" },
+          { cmd: "italic",    label: <em>I</em>,                                      title: "Italic (Ctrl+I)" },
+          { cmd: "underline", label: <span style={{ textDecoration: "underline" }}>U</span>, title: "Underline (Ctrl+U)" },
+        ].map(({ cmd, label, title }) => (
           <button
             key={cmd}
             type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec(cmd);
-            }}
-            style={btnStyle(false)}
+            title={title}
+            onMouseDown={(e) => { e.preventDefault(); exec(cmd); }}
+            style={btnStyle(cmd)}
           >
             {label}
           </button>
         ))}
+
         <div style={{ width: 1, background: "#e2e8f0", margin: "0 4px" }} />
+
+        {/* Alignment */}
         {[
-          { cmd: "justifyLeft", label: "≡L" },
-          { cmd: "justifyCenter", label: "≡C" },
-          { cmd: "justifyRight", label: "≡R" },
-          { cmd: "justifyFull", label: "≡J" },
-        ].map(({ cmd, label }) => (
+          { cmd: "justifyLeft",   label: "≡L", title: "Align Left" },
+          { cmd: "justifyCenter", label: "≡C", title: "Align Center" },
+          { cmd: "justifyRight",  label: "≡R", title: "Align Right" },
+          { cmd: "justifyFull",   label: "≡J", title: "Justify" },
+        ].map(({ cmd, label, title }) => (
           <button
             key={cmd}
             type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec(cmd);
-            }}
-            style={{ ...btnStyle(false), fontSize: 10 }}
+            title={title}
+            onMouseDown={(e) => { e.preventDefault(); exec(cmd); }}
+            style={{ ...btnStyle(cmd), fontSize: 10 }}
           >
             {label}
           </button>
         ))}
+
         <div style={{ width: 1, background: "#e2e8f0", margin: "0 4px" }} />
+
+        {/* Lists */}
         {[
-          { cmd: "insertUnorderedList", label: "• List" },
-          { cmd: "insertOrderedList", label: "1. List" },
-        ].map(({ cmd, label }) => (
+          { cmd: "insertUnorderedList", label: "• List", title: "Bullet List" },
+          { cmd: "insertOrderedList",   label: "1. List", title: "Numbered List" },
+        ].map(({ cmd, label, title }) => (
           <button
             key={cmd}
             type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              exec(cmd);
-            }}
-            style={{
-              ...btnStyle(false),
-              width: "auto",
-              padding: "0 8px",
-              fontSize: 10,
-            }}
+            title={title}
+            onMouseDown={(e) => { e.preventDefault(); exec(cmd); }}
+            style={{ ...btnStyle(cmd), width: "auto", padding: "0 8px", fontSize: 10 }}
           >
             {label}
           </button>
         ))}
+
         <div style={{ width: 1, background: "#e2e8f0", margin: "0 4px" }} />
+
+        {/* Font size */}
         <select
-          style={{
-            fontSize: 11,
-            border: "1px solid #e2e8f0",
-            borderRadius: 5,
-            padding: "2px 4px",
-            background: "#f8fafc",
-            color: "#475569",
-          }}
+          title="Font Size"
+          style={{ fontSize: 11, border: "1px solid #e2e8f0", borderRadius: 5, padding: "2px 4px", background: "#f8fafc", color: "#475569" }}
           onMouseDown={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            exec("fontSize", e.target.value);
-            e.target.value = "";
-          }}
+          onChange={(e) => { exec("fontSize", e.target.value); e.target.value = ""; }}
           defaultValue=""
         >
-          <option value="" disabled>
-            Size
-          </option>
-          {[1, 2, 3, 4, 5, 6, 7].map((s) => (
-            <option key={s} value={s}>
-              {["8", "10", "12", "14", "18", "24", "36"][s - 1]}px
-            </option>
+          <option value="" disabled>Size</option>
+          {[1,2,3,4,5,6,7].map((s) => (
+            <option key={s} value={s}>{["8","10","12","14","18","24","36"][s-1]}px</option>
           ))}
         </select>
       </div>
+
       {/* Editable area */}
       <div
         ref={ref}
         contentEditable
         suppressContentEditableWarning
         onInput={() => onChange(ref.current?.innerHTML || "")}
-        style={{
-          minHeight: 80,
-          padding: "10px 12px",
-          fontSize: 13,
-          color: "#0f172a",
-          outline: "none",
-          lineHeight: 1.6,
-          fontFamily: "'DM Sans', system-ui",
-        }}
+        onKeyUp={updateActiveFormats}
+        onMouseUp={updateActiveFormats}
+        style={{ minHeight: 80, padding: "10px 12px", fontSize: 13, color: "#0f172a", outline: "none", lineHeight: 1.6, fontFamily: "'DM Sans', system-ui" }}
         data-placeholder="Type your paragraph/instructions here…"
       />
       <style>{`
-        [contenteditable]:empty:before {
-          content: attr(data-placeholder);
-          color: #94a3b8;
-          pointer-events: none;
-        }
+        [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; }
       `}</style>
     </div>
   );
 };
+
+const SectionActions = ({ isDirty, isSaving, onSaveDraft, submitForm }) => (
+  <div style={{ display: "flex", gap: 8 }}>
+    {isDirty && (
+      <button
+        type="button"
+        className="fc-save-draft-btn"
+        onClick={onSaveDraft}
+        disabled={isSaving}
+      >
+        {isSaving ? (
+          <>
+            <span className="fc-spinner" /> Saving…
+          </>
+        ) : (
+          <>💾 Save Draft</>
+        )}
+      </button>
+    )}
+    <button
+      form="creator-form"
+      type="submit"
+      className="fc-publish-btn"
+      disabled={isSaving}
+    >
+      ✓ Publish
+    </button>
+  </div>
+);
 
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
@@ -2911,32 +2941,11 @@ const FormCreator = () => {
                         Set up the basic details for your form
                       </p>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {isDirty && (
-                        <button
-                          type="button"
-                          className="fc-save-draft-btn"
-                          onClick={saveDraftToServer}
-                          disabled={isSaving}
-                        >
-                          {isSaving ? (
-                            <>
-                              <span className="fc-spinner" /> Saving…
-                            </>
-                          ) : (
-                            <>💾 Save Draft</>
-                          )}
-                        </button>
-                      )}
-                      <button
-                        form="creator-form"
-                        type="submit"
-                        className="fc-publish-btn"
-                        disabled={isSaving}
-                      >
-                        ✓ Publish
-                      </button>
-                    </div>
+                    <SectionActions
+                      isDirty={isDirty}
+                      isSaving={isSaving}
+                      onSaveDraft={saveDraftToServer}
+                    />
                   </div>
 
                   <div className="fc-field-grid">
@@ -3246,32 +3255,11 @@ const FormCreator = () => {
                         Configure availability, access, and restrictions
                       </p>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {isDirty && (
-                        <button
-                          type="button"
-                          className="fc-save-draft-btn"
-                          onClick={saveDraftToServer}
-                          disabled={isSaving}
-                        >
-                          {isSaving ? (
-                            <>
-                              <span className="fc-spinner" /> Saving…
-                            </>
-                          ) : (
-                            <>💾 Save Draft</>
-                          )}
-                        </button>
-                      )}
-                      <button
-                        form="creator-form"
-                        type="submit"
-                        className="fc-publish-btn"
-                        disabled={isSaving}
-                      >
-                        ✓ Publish
-                      </button>
-                    </div>
+                    <SectionActions
+                      isDirty={isDirty}
+                      isSaving={isSaving}
+                      onSaveDraft={saveDraftToServer}
+                    />
                   </div>
                   <div className="fc-field-grid">
                     <div className="fc-field">
@@ -4002,6 +3990,112 @@ const FormCreator = () => {
                                 📝 Text Block (no answer)
                               </option>
                             </select>
+                          </div>
+                        )}
+
+                        {/* Optional question image */}
+                        {q.type !== "paragraph" && (
+                          <div style={{ marginTop: 8 }}>
+                            {q.imageUrl ? (
+                              <div
+                                style={{
+                                  position: "relative",
+                                  display: "inline-block",
+                                  maxWidth: 320,
+                                }}
+                              >
+                                <img
+                                  src={q.imageUrl}
+                                  alt="Question visual"
+                                  style={{
+                                    width: "100%",
+                                    maxHeight: 140,
+                                    objectFit: "cover",
+                                    borderRadius: 8,
+                                    border: "1.5px solid #e8ecf0",
+                                    display: "block",
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateQuestion(idx, "imageUrl", "")
+                                  }
+                                  style={{
+                                    position: "absolute",
+                                    top: 6,
+                                    right: 6,
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: "50%",
+                                    background: "rgba(0,0,0,0.6)",
+                                    border: "none",
+                                    color: "#fff",
+                                    cursor: "pointer",
+                                    fontSize: 16,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ) : (
+                              <label
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  background: "#f8fafc",
+                                  border: "1.5px dashed #cbd5e1",
+                                  borderRadius: 8,
+                                  padding: "5px 12px",
+                                  cursor: "pointer",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  color: "#94a3b8",
+                                }}
+                              >
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                >
+                                  <rect
+                                    x="3"
+                                    y="3"
+                                    width="18"
+                                    height="18"
+                                    rx="2"
+                                  />
+                                  <circle cx="8.5" cy="8.5" r="1.5" />
+                                  <polyline points="21 15 16 10 5 21" />
+                                </svg>
+                                Add image to question (optional)
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: "none" }}
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) =>
+                                      updateQuestion(
+                                        idx,
+                                        "imageUrl",
+                                        ev.target.result,
+                                      );
+                                    reader.readAsDataURL(file);
+                                  }}
+                                />
+                              </label>
+                            )}
                           </div>
                         )}
 

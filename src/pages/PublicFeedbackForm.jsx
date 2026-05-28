@@ -873,9 +873,9 @@ const NominationTableSection = ({
 
   const institutionValue = ntInstitution;
   const coordinatorValue = ntCoordinator;
-  const isLocked =
-    (isPersonalizedLink || gateVerified) &&
-    (Boolean(ntInstitution) || Boolean(ntCoordinator));
+  const institutionLocked =
+    (isPersonalizedLink || gateVerified) && Boolean(ntInstitution);
+  const coordinatorLocked = false; // Coordinator is always user-editable
 
   return (
     <section style={S.card}>
@@ -927,7 +927,7 @@ const NominationTableSection = ({
             className="form-input"
             style={{
               ...S.input,
-              ...(isLocked && institutionValue
+              ...(institutionLocked && institutionValue
                 ? {
                     background: "#f9fafb",
                     color: "#6b7280",
@@ -937,13 +937,12 @@ const NominationTableSection = ({
             }}
             placeholder="Enter institution name"
             value={institutionValue}
-            readOnly={isLocked && Boolean(institutionValue)}
+            readOnly={institutionLocked}
             onChange={(e) => {
-              if (!(isLocked && Boolean(institutionValue)))
-                setNtInstitution(e.target.value);
+              if (!institutionLocked) setNtInstitution(e.target.value);
             }}
           />
-          {isLocked && institutionValue && (
+          {institutionLocked && (
             <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
           )}
         </div>
@@ -955,7 +954,7 @@ const NominationTableSection = ({
             className="form-input"
             style={{
               ...S.input,
-              ...(isLocked && coordinatorValue
+              ...(coordinatorLocked && coordinatorValue
                 ? {
                     background: "#f9fafb",
                     color: "#6b7280",
@@ -965,15 +964,13 @@ const NominationTableSection = ({
             }}
             placeholder="Enter coordinator name"
             value={coordinatorValue}
-            readOnly={isLocked && Boolean(coordinatorValue)}
+            readOnly={coordinatorLocked}
+            onChange={(e) => setNtCoordinator(e.target.value)}
             onChange={(e) => {
               if (!(isLocked && Boolean(coordinatorValue)))
                 setNtCoordinator(e.target.value);
             }}
           />
-          {isLocked && coordinatorValue && (
-            <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
-          )}
         </div>
       </div>
 
@@ -1029,6 +1026,57 @@ const NominationTableSection = ({
       </p>
     </section>
   );
+};
+
+const FORM_THEMES = {
+  webinar: {
+    gradient: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)",
+    accent: "#818cf8",
+    accentBg: "rgba(129,140,248,0.15)",
+    accentBorder: "rgba(129,140,248,0.3)",
+  },
+  flash: {
+    gradient: "linear-gradient(135deg, #1c1917 0%, #292524 50%, #7c2d12 100%)",
+    accent: "#fb923c",
+    accentBg: "rgba(251,146,60,0.15)",
+    accentBorder: "rgba(251,146,60,0.3)",
+  },
+  survey: {
+    gradient: "linear-gradient(135deg, #0c1445 0%, #1e3a5f 50%, #065f46 100%)",
+    accent: "#34d399",
+    accentBg: "rgba(52,211,153,0.15)",
+    accentBorder: "rgba(52,211,153,0.3)",
+  },
+  event: {
+    gradient: "linear-gradient(135deg, #1a0533 0%, #2d1b69 50%, #4c1d95 100%)",
+    accent: "#c084fc",
+    accentBg: "rgba(192,132,252,0.15)",
+    accentBorder: "rgba(192,132,252,0.3)",
+  },
+  internal: {
+    gradient: "linear-gradient(135deg, #0f172a 0%, #0c4a6e 50%, #164e63 100%)",
+    accent: "#38bdf8",
+    accentBg: "rgba(56,189,248,0.15)",
+    accentBorder: "rgba(56,189,248,0.3)",
+  },
+  assessment: {
+    gradient: "linear-gradient(135deg, #14532d 0%, #166534 50%, #064e3b 100%)",
+    accent: "#4ade80",
+    accentBg: "rgba(74,222,128,0.15)",
+    accentBorder: "rgba(74,222,128,0.3)",
+  },
+  nomination: {
+    gradient: "linear-gradient(135deg, #451a03 0%, #78350f 50%, #92400e 100%)",
+    accent: "#fbbf24",
+    accentBg: "rgba(251,191,36,0.15)",
+    accentBorder: "rgba(251,191,36,0.3)",
+  },
+  default: {
+    gradient: "linear-gradient(135deg, #111827 0%, #1f2937 50%, #111827 100%)",
+    accent: "#a5b4fc",
+    accentBg: "rgba(165,180,252,0.15)",
+    accentBorder: "rgba(165,180,252,0.3)",
+  },
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -1114,7 +1162,6 @@ const PublicFeedbackForm = () => {
             companyDetails: "",
           });
           setNtInstitution(serverPrefill.companyName || "");
-          setNtCoordinator(serverPrefill.name || "");
           setGateState("verified");
         } else if (accessEmail) {
           const prefillName =
@@ -1136,7 +1183,6 @@ const PublicFeedbackForm = () => {
             prefillName || accessName || gateName,
           );
           setNtInstitution(serverPrefill.companyName || "");
-          setNtCoordinator(prefillName || "");
           setGateState("verified");
         } else {
           const savedEmail = getSavedRespondentEmail();
@@ -1468,6 +1514,8 @@ const PublicFeedbackForm = () => {
     );
   }
 
+  const theme = FORM_THEMES[form?.formType] || FORM_THEMES.default;
+
   if (!form) return null;
 
   // ── Greeting & display logic ──────────────────────────────────────────────
@@ -1519,14 +1567,20 @@ const PublicFeedbackForm = () => {
       <style>{CSS}</style>
 
       {/* ── Hero ── */}
-      <header style={S.hero}>
+      <header style={{ ...S.hero, background: theme.gradient }}>
         <div style={S.heroBg} />
         <div style={S.heroOrb1} />
         <div style={S.heroOrb2} />
         <div style={S.heroGrid} />
 
         <div style={S.heroContent}>
-          <div style={S.simtrakBrand}>
+          <div
+            style={{
+              ...S.simtrakBrand,
+              background: theme.accentBg,
+              borderColor: theme.accentBorder,
+            }}
+          >
             {form.imageUrl && (
               <div
                 style={{
@@ -1550,7 +1604,13 @@ const PublicFeedbackForm = () => {
                 />
               </div>
             )}
-            <div style={S.simtrakLogoMark}>
+            <div
+              style={{
+                ...S.simtrakLogoMark,
+                background: theme.accentBg,
+                color: theme.accent,
+              }}
+            >
               <svg
                 width="16"
                 height="16"
@@ -1563,7 +1623,9 @@ const PublicFeedbackForm = () => {
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
             </div>
-            <span style={S.simtrakName}>Simtrak Feedback Hub - OneCollect</span>
+            <span style={{ ...S.simtrakName, color: theme.accent }}>
+              Simtrak Feedback Hub - OneCollect
+            </span>
           </div>
 
           <div style={S.typeBadge}>
@@ -1632,6 +1694,61 @@ const PublicFeedbackForm = () => {
             name={savedName}
             onClear={handleClearIdentity}
           />
+        )}
+
+        {/* Progress indicator */}
+        {form.questions?.filter((q) => q.type !== "paragraph").length > 0 && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: "10px 14px",
+              background: "#fff",
+              borderRadius: 10,
+              border: "1px solid #f0f0f0",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#6b7280",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {form.questions.filter((q) => q.type !== "paragraph").length}{" "}
+              question
+              {form.questions.filter((q) => q.type !== "paragraph").length !== 1
+                ? "s"
+                : ""}
+            </span>
+            <div
+              style={{
+                flex: 1,
+                height: 4,
+                background: "#f3f4f6",
+                borderRadius: 99,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: "0%",
+                  background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
+                  borderRadius: 99,
+                  transition: "width 0.4s",
+                }}
+              />
+            </div>
+            <span
+              style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}
+            >
+              ~ 2–3 min
+            </span>
+          </div>
         )}
 
         <form
@@ -2565,17 +2682,18 @@ const S = {
     justifyContent: "center",
     gap: 8,
     width: "100%",
-    padding: "14px 20px",
-    background: "#111827",
+    padding: "15px 20px",
+    background: "linear-gradient(135deg, #111827 0%, #1f2937 100%)",
     color: "#fff",
     border: "none",
-    borderRadius: 12,
-    fontSize: 14,
+    borderRadius: 14,
+    fontSize: 15,
     fontWeight: 700,
     cursor: "pointer",
-    letterSpacing: "0.02em",
-    transition: "all 0.15s",
+    letterSpacing: "0.03em",
+    transition: "all 0.2s",
     fontFamily: "'DM Sans', system-ui",
+    boxShadow: "0 4px 15px rgba(17,24,39,0.3)",
   },
   ghostBtn: {
     width: "100%",
@@ -2801,15 +2919,17 @@ const S = {
   },
   card: {
     background: "#fff",
-    borderRadius: 14,
-    border: "1px solid #f3f4f6",
-    padding: "22px 24px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-    transition: "border-color 0.2s, box-shadow 0.2s",
+    borderRadius: 16,
+    border: "1px solid #f0f0f0",
+    padding: "24px 26px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)",
+    transition: "border-color 0.2s, box-shadow 0.2s, transform 0.15s",
   },
   cardActive: {
     borderColor: "#c7d2fe",
-    boxShadow: "0 0 0 3px rgba(99,102,241,0.08)",
+    boxShadow:
+      "0 4px 20px rgba(99,102,241,0.12), 0 0 0 3px rgba(99,102,241,0.08)",
+    transform: "translateY(-1px)",
   },
   sectionHead: {
     display: "flex",
