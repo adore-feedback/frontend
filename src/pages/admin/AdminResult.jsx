@@ -243,7 +243,7 @@ const AdminResult = () => {
         replace: true,
       });
     }
-  }, [formId, formsLoadDone, allForms, navigate]);
+  }, [formId, formsLoadDone, allForms, navigate, basePath]);
 
   /* ── Reset search on form switch ── */
   useEffect(() => {
@@ -1364,7 +1364,7 @@ const AdminResult = () => {
                 <h3 className="ar-modal-title">Response Detail</h3>
                 <p className="ar-modal-sub">
                   {dateFormatter.format(
-                    new Date(selectedResponse.submittedAt || Date.now()),
+                    selectedResponse.submittedAt ? dateFormatter.format(new Date(selectedResponse.submittedAt)) : "N/A"
                   )}
                 </p>
               </div>

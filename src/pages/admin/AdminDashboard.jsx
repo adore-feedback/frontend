@@ -4,7 +4,6 @@ import { useAuth } from "../../context/AuthContext";
 import {
   getFormResults,
   getForms,
-  deleteForm,
   permanentDeleteForm,
   updateFormSettings,
   generateInviteTokens,
@@ -45,29 +44,20 @@ const STATUS_META = {
   },
 };
 
-/* ─── Personalized Links Panel (reused from FormCreator) ──────────────────── */
-/**
- * FIX: This panel was only in FormCreator but never in the Settings modal
- * on the dashboard. Added here so admins can copy signed links from the
- * dashboard without going back to the form editor.
- */
 const PersonalizedLinksPanel = ({
   formId,
   formSlug,
   allowedRespondents,
-  personalizations,
 }) => {
   const [copied, setCopied] = useState("");
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const identifier = formSlug || formId;
-
   useEffect(() => {
     if (!formId || !allowedRespondents?.length) {
-      setTokens([]);
-      return;
+      const t = setTimeout(() => setTokens([]), 0);
+      return () => clearTimeout(t);
     }
 
     let cancelled = false;
@@ -1936,9 +1926,10 @@ const AdminDashboard = () => {
                             <div
                               style={{
                                 display: "flex",
-                                gap: 6,
+                                gap: 4,
                                 justifyContent: "flex-end",
-                                flexWrap: "wrap",
+                                flexWrap: "nowrap",
+                                alignItems: "center",
                               }}
                               className="dash-action-btns"
                             >
@@ -2435,8 +2426,8 @@ const S = {
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "1fr 320px",
-    gap: 20,
+    gridTemplateColumns: "1fr 260px",
+    gap: 16,
     alignItems: "start",
   },
   tableCard: {
@@ -2595,62 +2586,67 @@ const S = {
     letterSpacing: "0.04em",
   },
   actionEdit: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 700,
     color: "#d97706",
     background: "#fffbeb",
     border: "1px solid #fde68a",
-    borderRadius: 7,
-    padding: "5px 10px",
+    borderRadius: 6,
+    padding: "4px 8px",
     textDecoration: "none",
-    letterSpacing: "0.04em",
+    letterSpacing: "0.03em",
     textTransform: "uppercase",
+    whiteSpace: "nowrap",
   },
   actionSettings: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 700,
     color: "#7c3aed",
     background: "#faf5ff",
     border: "1px solid #e9d5ff",
-    borderRadius: 7,
-    padding: "5px 8px",
+    borderRadius: 6,
+    padding: "4px 7px",
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   actionView: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 700,
     color: "#2563eb",
     background: "#eff6ff",
     border: "1px solid #bfdbfe",
-    borderRadius: 7,
-    padding: "5px 10px",
+    borderRadius: 6,
+    padding: "4px 8px",
     textDecoration: "none",
-    letterSpacing: "0.04em",
+    letterSpacing: "0.03em",
     textTransform: "uppercase",
+    whiteSpace: "nowrap",
   },
   actionDelete: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 700,
     color: "#dc2626",
     background: "#fff5f5",
     border: "1px solid #fecaca",
-    borderRadius: 7,
-    padding: "5px 10px",
+    borderRadius: 6,
+    padding: "4px 8px",
     cursor: "pointer",
-    letterSpacing: "0.04em",
+    letterSpacing: "0.03em",
     textTransform: "uppercase",
+    whiteSpace: "nowrap",
   },
   actionPermanentDelete: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 700,
     color: "#7c3aed",
     background: "#f5f3ff",
     border: "1px solid #ddd6fe",
-    borderRadius: 7,
-    padding: "5px 10px",
+    borderRadius: 6,
+    padding: "4px 8px",
     cursor: "pointer",
-    letterSpacing: "0.04em",
+    letterSpacing: "0.03em",
     textTransform: "uppercase",
+    whiteSpace: "nowrap",
   },
   emptyRow: {
     textAlign: "center",
@@ -2952,21 +2948,6 @@ const ANIM = `
   }
   @media (max-width: 400px) {
       .dash-stat-pill { flex: 1 1 100%; }
-  }
-
-  @media (max-width: 768px) {
-    .dash-action-btns {
-      flex-direction: column !important;
-      align-items: flex-end !important;
-      gap: 4px !important;
-    }
-    .dash-action-btns a,
-    .dash-action-btns button {
-      width: 100%;
-      justify-content: center;
-      text-align: center;
-      box-sizing: border-box;
-    }
   }
   `;
 

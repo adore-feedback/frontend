@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Link, useBlocker, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   createForm,
@@ -35,7 +35,9 @@ const saveDraft = (data) => {
       DRAFT_KEY,
       JSON.stringify({ ...data, _savedAt: Date.now() }),
     );
-  } catch {}
+  } catch {
+    //Intentionally Empty
+  }
 };
 const loadDraft = () => {
   try {
@@ -48,7 +50,9 @@ const loadDraft = () => {
 const clearDraft = () => {
   try {
     localStorage.removeItem(DRAFT_KEY);
-  } catch {}
+  } catch {
+    //Intentionally Empty
+  }
 };
 
 const loadSavedTemplates = () => {
@@ -226,6 +230,7 @@ const QTYPE_ICONS = {
   "single-choice": "🔘",
   "multiple-choice": "☑️",
   paragraph: "📝",
+  "file-upload": "📎",
 };
 
 const INITIAL_FORM = {
@@ -540,12 +545,7 @@ const PersonalizationEditor = ({ respondents, personalizations, onChange }) => {
   );
 };
 
-const PersonalizedLinksPanel = ({
-  formId,
-  formSlug,
-  allowedRespondents,
-  personalizations,
-}) => {
+const PersonalizedLinksPanel = ({ formId, formSlug, allowedRespondents }) => {
   const [copied, setCopied] = useState("");
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -565,7 +565,6 @@ const PersonalizedLinksPanel = ({
       .then((data) => {
         if (cancelled) return;
         const origin = window.location.origin;
-        const identifier = formSlug || formId;
         const enriched = (data.tokens || []).map((t) => ({
           ...t,
           url: t.url.startsWith("http")
@@ -800,7 +799,8 @@ const PollOptionsEditor = ({ value, onChange }) => {
   useEffect(() => {
     if (value !== prevRef.current) {
       prevRef.current = value;
-      setLocalOptions(parseOpts(value));
+      const t = setTimeout(() => setLocalOptions(parseOpts(value)), 0);
+      return () => clearTimeout(t);
     }
   }, [value]);
 
@@ -982,11 +982,14 @@ const DateTimePicker = ({ value, onChange, label, hint, required }) => {
     if (!value) return;
     const d = new Date(value.length === 16 ? value + ":00" : value);
     if (!isNaN(d.getTime())) {
-      setViewYear(d.getFullYear());
-      setViewMonth(d.getMonth());
-      setSelDate(d.getDate());
-      setSelHour(d.getHours());
-      setSelMin(d.getMinutes());
+      const t = setTimeout(() => {
+        setViewYear(d.getFullYear());
+        setViewMonth(d.getMonth());
+        setSelDate(d.getDate());
+        setSelHour(d.getHours());
+        setSelMin(d.getMinutes());
+      }, 0);
+      return () => clearTimeout(t);
     }
   }, [value]);
 
@@ -1924,7 +1927,7 @@ const ParagraphEditor = ({ value, onChange }) => {
     if (ref.current && ref.current.innerHTML !== value) {
       ref.current.innerHTML = value || "";
     }
-  }, []); // mount only
+  }, [value]); // mount only
 
   // btnStyle now takes the command key and reads live state
   const btnStyle = (cmd) => ({
@@ -2098,7 +2101,7 @@ const ParagraphEditor = ({ value, onChange }) => {
   );
 };
 
-const SectionActions = ({ isDirty, isSaving, onSaveDraft, submitForm }) => (
+const SectionActions = ({ isDirty, isSaving, onSaveDraft }) => (
   <div style={{ display: "flex", gap: 8 }}>
     {isDirty && (
       <button
@@ -2278,7 +2281,7 @@ const FormCreator = () => {
   };
 
   const addTemplate = (t) => {
-    const { label, savedAt, ...rest } = t;
+    const { label: _label, savedAt: _savedAt, ...rest } = t;
     setForm((c) => ({
       ...c,
       questions: [{ ...emptyQuestion(), ...rest }, ...c.questions],
@@ -2374,7 +2377,6 @@ const FormCreator = () => {
 
   const stripBase64 = (str) => {
     if (!str) return "";
-    if (str.startsWith("data:")) return ""; // remove base64, keep only URLs
     return str;
   };
 
@@ -4093,6 +4095,9 @@ const FormCreator = () => {
                               </option>
                               <option value="paragraph">
                                 📝 Text Block (no answer)
+                              </option>
+                              <option value="file-upload">
+                                📎 File Upload
                               </option>
                             </select>
                           </div>

@@ -397,7 +397,7 @@ const StatsBar = ({ total, active, pending }) => (
       { label: "Total Users", value: total, color: "#3b82f6" },
       { label: "Active", value: active, color: "#10b981" },
       { label: "Pending", value: pending, color: "#f59e0b" },
-    ].map(({ label, value, color }) => (
+    ].map(({ label, value }) => (
       <div
         key={label}
         style={{

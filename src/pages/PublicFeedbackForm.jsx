@@ -1,3 +1,4 @@
+import React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
@@ -28,7 +29,9 @@ const storeSubmission = (formId, email) => {
     const map = raw ? JSON.parse(raw) : {};
     map[formId] = { email: email || "", submittedAt: Date.now() };
     localStorage.setItem(SUBMISSION_KEY, JSON.stringify(map));
-  } catch {}
+  } catch {
+    // intentionally empty
+  }
 };
 
 const persistRespondentIdentity = (email, name) => {
@@ -36,7 +39,8 @@ const persistRespondentIdentity = (email, name) => {
     if (email)
       localStorage.setItem(RESPONDENT_EMAIL_KEY, email.toLowerCase().trim());
     if (name) localStorage.setItem(RESPONDENT_NAME_KEY, name.trim());
-  } catch {}
+  } catch {// intentionally empty
+    }
 };
 
 const getSavedRespondentEmail = () => {
@@ -75,7 +79,9 @@ const storeVerifiedAccess = (formId, email, name) => {
       verifiedAt: Date.now(),
     };
     localStorage.setItem(VERIFIED_ACCESS_KEY, JSON.stringify(map));
-  } catch {}
+  } catch {
+    // intentionally empty
+  }
 };
 
 const clearVerifiedAccess = (formId) => {
@@ -84,7 +90,9 @@ const clearVerifiedAccess = (formId) => {
     const map = raw ? JSON.parse(raw) : {};
     delete map[formId];
     localStorage.setItem(VERIFIED_ACCESS_KEY, JSON.stringify(map));
-  } catch {}
+  } catch {
+    // intentionally empty
+  }
 };
 
 const getSentiment = (rating) => {
@@ -330,6 +338,202 @@ const HybridMultiSelect = ({ question, value, onChange }) => {
       {selectedCount > 0 && (
         <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700 }}>
           {selectedCount} answer{selectedCount !== 1 ? "s" : ""} provided
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── File Upload Input ────────────────────────────────────────────────────────
+const ACCEPTED_TYPES = [
+  "image/*",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".txt",
+  ".csv",
+];
+const MAX_FILE_MB = 10;
+
+const FileUploadInput = ({ value, onChange }) => {
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = React.useRef(null);
+
+  const processFile = (file) => {
+    setError("");
+    if (!file) return;
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      setError(`File too large. Maximum size is ${MAX_FILE_MB}MB.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      onChange({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        data: e.target.result, // base64 data URL
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  };
+
+  const handleChange = (e) => {
+    const file = e.target.files[0];
+    if (file) processFile(file);
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileIcon = (type = "") => {
+    if (type.startsWith("image/")) return "🖼️";
+    if (type === "application/pdf") return "📄";
+    if (type.includes("word")) return "📝";
+    if (type.includes("excel") || type.includes("sheet")) return "📊";
+    return "📎";
+  };
+
+  if (value && value.name) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "12px 16px",
+          background: "#f0fdf4",
+          border: "1.5px solid #bbf7d0",
+          borderRadius: 12,
+        }}
+      >
+        <span style={{ fontSize: 28 }}>{getFileIcon(value.type)}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#111827",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {value.name}
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+            {formatSize(value.size)}
+          </div>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#10b981",
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Uploaded
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          style={{
+            background: "none",
+            border: "1px solid #d1fae5",
+            borderRadius: 8,
+            padding: "4px 10px",
+            fontSize: 12,
+            color: "#6b7280",
+            cursor: "pointer",
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        style={{
+          border: `2px dashed ${dragOver ? "#6366f1" : "#d1d5db"}`,
+          borderRadius: 12,
+          padding: "28px 20px",
+          textAlign: "center",
+          cursor: "pointer",
+          background: dragOver ? "#f0f0fe" : "#fafafa",
+          transition: "all 0.2s",
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED_TYPES.join(",")}
+          style={{ display: "none" }}
+          onChange={handleChange}
+        />
+        <div style={{ fontSize: 32, marginBottom: 10 }}>📎</div>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#374151",
+            marginBottom: 4,
+          }}
+        >
+          Click to upload or drag & drop
+        </div>
+        <div style={{ fontSize: 12, color: "#9ca3af" }}>
+          Images, PDF, Word, Excel · Max {MAX_FILE_MB}MB
+        </div>
+      </div>
+      {error && (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 12,
+            color: "#dc2626",
+            fontWeight: 600,
+          }}
+        >
+          ⚠️ {error}
         </div>
       )}
     </div>
@@ -859,8 +1063,6 @@ const NominationTableSection = ({
   setNtInstitution,
   ntCoordinator,
   setNtCoordinator,
-  isPersonalizedLink,
-  gateVerified,
 }) => {
   const nt = nominationTable;
   if (!nt?.enabled || !nt.columns?.length) return null;
@@ -1211,7 +1413,6 @@ const PublicFeedbackForm = () => {
       } finally {
         setIsLoading(false);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [
       formId,
@@ -1261,7 +1462,9 @@ const PublicFeedbackForm = () => {
     try {
       localStorage.removeItem(RESPONDENT_EMAIL_KEY);
       localStorage.removeItem(RESPONDENT_NAME_KEY);
-    } catch {}
+    } catch {
+      // intentionally empty
+    }
     setRespondent({
       name: "",
       email: "",
@@ -1281,6 +1484,16 @@ const PublicFeedbackForm = () => {
 
   // Flatten hybrid multi-select before submit
   const flattenAnswer = (q, raw) => {
+    if (q.type === "file-upload") {
+      if (!raw || !raw.name) return "";
+      // Store metadata + data; backend receives it in answer.value
+      return {
+        fileName: raw.name,
+        fileSize: raw.size,
+        fileType: raw.type,
+        fileData: raw.data,
+      };
+    }
     if (
       q.type === "multiple-choice" &&
       raw &&
@@ -2223,9 +2436,9 @@ const PublicFeedbackForm = () => {
                     >
                       Select one
                     </div>
-                    {(q.options || []).map((opt, optIdx) => {
+                    {(q.options || []).map((opt) => {
                       const selected = answers[q.id] === opt;
-                      const letter = String.fromCharCode(65 + optIdx);
+                      // const letter = String.fromCharCode(65 + optIdx);
 
                       return (
                         <label
@@ -2367,7 +2580,7 @@ const PublicFeedbackForm = () => {
                     >
                       Select all that apply
                     </div>
-                    {(q.options || []).map((opt, optIdx) => {
+                    {(q.options || []).map((opt) => {
                       const val =
                         answers[q.id] &&
                         typeof answers[q.id] === "object" &&
@@ -2381,7 +2594,7 @@ const PublicFeedbackForm = () => {
                             };
 
                       const selected = (val.selected || []).includes(opt);
-                      const letter = String.fromCharCode(65 + optIdx);
+                      // const letter = String.fromCharCode(65 + optIdx);
 
                       const toggle = () => {
                         const prev = val.selected || [];
@@ -2549,6 +2762,13 @@ const PublicFeedbackForm = () => {
                     )}
                   </div>
                 )}
+                {q.type === "file-upload" && (
+                  <FileUploadInput
+                    questionId={q.id}
+                    value={answers[q.id] || null}
+                    onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
+                  />
+                )}
               </section>
             );
           })}
@@ -2582,7 +2802,7 @@ const PublicFeedbackForm = () => {
               <line x1="22" y1="2" x2="11" y2="13" />
               <polygon points="22 2 15 22 11 13 2 9 22 2" />
             </svg>
-            Submit Feedback
+            Submit
           </button>
 
           <div style={S.footerBrand}>

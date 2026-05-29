@@ -4,17 +4,19 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || "/api").replace(
 );
 const DEFAULT_USER_ID = "demo-admin";
 
-const getUserId = () => {
-  if (typeof window === "undefined") return DEFAULT_USER_ID;
-  return window.localStorage.getItem("adoreUserId") || DEFAULT_USER_ID;
-};
+// const getUserId = () => {
+//   if (typeof window === "undefined") return DEFAULT_USER_ID;
+//   return window.localStorage.getItem("adoreUserId") || DEFAULT_USER_ID;
+// };
 
 const FORM_TOKEN_KEY = (formId) => `simtrak_form_token_${formId}`;
 
 export const storeFormAccessToken = (formId, token) => {
   try {
     if (token) sessionStorage.setItem(FORM_TOKEN_KEY(formId), token);
-  } catch {}
+  } catch {
+    // intentionally empty
+  }
 };
 
 export const getFormAccessToken = (formId) => {
@@ -28,12 +30,13 @@ export const getFormAccessToken = (formId) => {
 export const clearFormAccessToken = (formId) => {
   try {
     sessionStorage.removeItem(FORM_TOKEN_KEY(formId));
-  } catch {}
+  } catch {// intentionally empty
+    }
 };
 
 const request = async (path, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...options.headers,
