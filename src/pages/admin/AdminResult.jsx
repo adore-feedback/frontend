@@ -1363,9 +1363,11 @@ const AdminResult = () => {
               <div>
                 <h3 className="ar-modal-title">Response Detail</h3>
                 <p className="ar-modal-sub">
-                  {dateFormatter.format(
-                    selectedResponse.submittedAt ? dateFormatter.format(new Date(selectedResponse.submittedAt)) : "N/A"
-                  )}
+                  {selectedResponse.submittedAt
+                    ? dateFormatter.format(
+                        new Date(selectedResponse.submittedAt),
+                      )
+                    : "N/A"}
                 </p>
               </div>
               <button
@@ -1511,9 +1513,17 @@ const AdminResult = () => {
                       margin: "0 0 10px",
                     }}
                   >
-                    {selectedResponse.nominationTableData.heading || "Nomination Table"}
+                    {selectedResponse.nominationTableData.heading ||
+                      "Nomination Table"}
                     {selectedResponse.nominationTableData.subHeading && (
-                      <span style={{ fontWeight: 500, marginLeft: 6, textTransform: "none", fontSize: 11 }}>
+                      <span
+                        style={{
+                          fontWeight: 500,
+                          marginLeft: 6,
+                          textTransform: "none",
+                          fontSize: 11,
+                        }}
+                      >
                         — {selectedResponse.nominationTableData.subHeading}
                       </span>
                     )}
@@ -1531,7 +1541,9 @@ const AdminResult = () => {
                       {selectedResponse.nominationTableData.institutionName && (
                         <div style={{ fontSize: 12, color: "#374151" }}>
                           <span style={{ fontWeight: 700, color: "#64748b" }}>
-                            {selectedResponse.nominationTableData.institutionLabel || "Institution"}:{" "}
+                            {selectedResponse.nominationTableData
+                              .institutionLabel || "Institution"}
+                            :{" "}
                           </span>
                           {selectedResponse.nominationTableData.institutionName}
                         </div>
@@ -1539,14 +1551,22 @@ const AdminResult = () => {
                       {selectedResponse.nominationTableData.coordinatorName && (
                         <div style={{ fontSize: 12, color: "#374151" }}>
                           <span style={{ fontWeight: 700, color: "#64748b" }}>
-                            {selectedResponse.nominationTableData.coordinatorLabel || "Coordinator"}:{" "}
+                            {selectedResponse.nominationTableData
+                              .coordinatorLabel || "Coordinator"}
+                            :{" "}
                           </span>
                           {selectedResponse.nominationTableData.coordinatorName}
                         </div>
                       )}
                     </div>
                   )}
-                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1.5px solid #111827" }}>
+                  <div
+                    style={{
+                      overflowX: "auto",
+                      borderRadius: 8,
+                      border: "1.5px solid #111827",
+                    }}
+                  >
                     <table
                       style={{
                         width: "100%",
@@ -1571,30 +1591,32 @@ const AdminResult = () => {
                           >
                             Sr.
                           </th>
-                          {selectedResponse.nominationTableData.columns.map((col) => (
-                            <th
-                              key={col.id || col.label}
-                              style={{
-                                border: "1px solid #111827",
-                                padding: "7px 10px",
-                                background: "#fffde7",
-                                fontWeight: 700,
-                                color: "#111827",
-                                textAlign: "center",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {col.label}
-                            </th>
-                          ))}
+                          {selectedResponse.nominationTableData.columns.map(
+                            (col) => (
+                              <th
+                                key={col.id || col.label}
+                                style={{
+                                  border: "1px solid #111827",
+                                  padding: "7px 10px",
+                                  background: "#fffde7",
+                                  fontWeight: 700,
+                                  color: "#111827",
+                                  textAlign: "center",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {col.label}
+                              </th>
+                            ),
+                          )}
                         </tr>
                       </thead>
                       <tbody>
                         {(selectedResponse.nominationTableData.rows || [])
                           .filter((row) =>
                             selectedResponse.nominationTableData.columns.some(
-                              (col) => row[col.id]?.trim()
-                            )
+                              (col) => row[col.id]?.trim(),
+                            ),
                           )
                           .map((row, ri) => (
                             <tr key={ri}>
@@ -1610,19 +1632,21 @@ const AdminResult = () => {
                               >
                                 {ri + 1}
                               </td>
-                              {selectedResponse.nominationTableData.columns.map((col) => (
-                                <td
-                                  key={col.id || col.label}
-                                  style={{
-                                    border: "1px solid #111827",
-                                    padding: "6px 10px",
-                                    color: "#374151",
-                                    background: "#fff",
-                                  }}
-                                >
-                                  {row[col.id] || "—"}
-                                </td>
-                              ))}
+                              {selectedResponse.nominationTableData.columns.map(
+                                (col) => (
+                                  <td
+                                    key={col.id || col.label}
+                                    style={{
+                                      border: "1px solid #111827",
+                                      padding: "6px 10px",
+                                      color: "#374151",
+                                      background: "#fff",
+                                    }}
+                                  >
+                                    {row[col.id] || "—"}
+                                  </td>
+                                ),
+                              )}
                             </tr>
                           ))}
                       </tbody>
