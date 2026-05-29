@@ -19,7 +19,7 @@ const emptyQuestion = () => ({
   required: false,
   optionsText: "",
   answerTemplatesText: "",
-  allowCustomText: true,
+  allowCustomText: false,
   imageUrl: "",
 });
 
@@ -143,7 +143,7 @@ const formToState = (apiForm) => ({
     ...q,
     optionsText: (q.options || []).join(", "),
     answerTemplatesText: (q.answerTemplates || []).join(", "),
-    allowCustomText: q.allowCustomText !== false,
+    allowCustomText: !!q.allowCustomText,
   })),
   personalizations: apiForm.personalizations || [],
   nominationTable: apiForm.nominationTable
@@ -216,6 +216,7 @@ const BUILTIN_QUESTION_TEMPLATES = [
     required: false,
     optionsText: "Topic A,Topic B,Topic C,Topic D",
     answerTemplatesText: "",
+    allowCustomText: false,
   },
 ];
 
@@ -1878,16 +1879,28 @@ const ParagraphEditor = ({ value, onChange }) => {
 
   const updateActiveFormats = useCallback(() => {
     try {
+      const sel = window.getSelection();
+      const hasRange = sel && sel.rangeCount > 0 && !sel.isCollapsed;
+      // Only check alignment commands when there's an actual selection
+      // to avoid justifyLeft appearing "active" by default on every click
       setActiveFormats({
-        bold:               document.queryCommandState("bold"),
-        italic:             document.queryCommandState("italic"),
-        underline:          document.queryCommandState("underline"),
-        justifyLeft:        document.queryCommandState("justifyLeft"),
-        justifyCenter:      document.queryCommandState("justifyCenter"),
-        justifyRight:       document.queryCommandState("justifyRight"),
-        justifyFull:        document.queryCommandState("justifyFull"),
-        insertUnorderedList:document.queryCommandState("insertUnorderedList"),
-        insertOrderedList:  document.queryCommandState("insertOrderedList"),
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+        justifyLeft: hasRange
+          ? document.queryCommandState("justifyLeft")
+          : false,
+        justifyCenter: hasRange
+          ? document.queryCommandState("justifyCenter")
+          : false,
+        justifyRight: hasRange
+          ? document.queryCommandState("justifyRight")
+          : false,
+        justifyFull: hasRange
+          ? document.queryCommandState("justifyFull")
+          : false,
+        insertUnorderedList: document.queryCommandState("insertUnorderedList"),
+        insertOrderedList: document.queryCommandState("insertOrderedList"),
       });
     } catch {
       // queryCommandState throws in some contexts — safe to ignore
@@ -1896,7 +1909,8 @@ const ParagraphEditor = ({ value, onChange }) => {
 
   useEffect(() => {
     document.addEventListener("selectionchange", updateActiveFormats);
-    return () => document.removeEventListener("selectionchange", updateActiveFormats);
+    return () =>
+      document.removeEventListener("selectionchange", updateActiveFormats);
   }, [updateActiveFormats]);
 
   const exec = (cmd, val = null) => {
@@ -1918,8 +1932,8 @@ const ParagraphEditor = ({ value, onChange }) => {
     height: 28,
     borderRadius: 6,
     background: activeFormats[cmd] ? "#0f172a" : "#f1f5f9",
-    color:      activeFormats[cmd] ? "#fff"    : "#475569",
-    border:     activeFormats[cmd] ? "1px solid #0f172a" : "1px solid #e2e8f0",
+    color: activeFormats[cmd] ? "#fff" : "#475569",
+    border: activeFormats[cmd] ? "1px solid #0f172a" : "1px solid #e2e8f0",
     cursor: "pointer",
     fontSize: 12,
     fontWeight: 700,
@@ -1931,21 +1945,43 @@ const ParagraphEditor = ({ value, onChange }) => {
   });
 
   return (
-    <div style={{ border: "1.5px solid #e8ecf0", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+    <div
+      style={{
+        border: "1.5px solid #e8ecf0",
+        borderRadius: 10,
+        overflow: "hidden",
+        background: "#fff",
+      }}
+    >
       {/* Toolbar */}
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", padding: "8px 10px", background: "#f8fafc", borderBottom: "1px solid #e8ecf0" }}>
-
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          flexWrap: "wrap",
+          padding: "8px 10px",
+          background: "#f8fafc",
+          borderBottom: "1px solid #e8ecf0",
+        }}
+      >
         {/* Bold / Italic / Underline */}
         {[
-          { cmd: "bold",      label: <strong>B</strong>,                              title: "Bold (Ctrl+B)" },
-          { cmd: "italic",    label: <em>I</em>,                                      title: "Italic (Ctrl+I)" },
-          { cmd: "underline", label: <span style={{ textDecoration: "underline" }}>U</span>, title: "Underline (Ctrl+U)" },
+          { cmd: "bold", label: <strong>B</strong>, title: "Bold (Ctrl+B)" },
+          { cmd: "italic", label: <em>I</em>, title: "Italic (Ctrl+I)" },
+          {
+            cmd: "underline",
+            label: <span style={{ textDecoration: "underline" }}>U</span>,
+            title: "Underline (Ctrl+U)",
+          },
         ].map(({ cmd, label, title }) => (
           <button
             key={cmd}
             type="button"
             title={title}
-            onMouseDown={(e) => { e.preventDefault(); exec(cmd); }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec(cmd);
+            }}
             style={btnStyle(cmd)}
           >
             {label}
@@ -1956,16 +1992,19 @@ const ParagraphEditor = ({ value, onChange }) => {
 
         {/* Alignment */}
         {[
-          { cmd: "justifyLeft",   label: "≡L", title: "Align Left" },
+          { cmd: "justifyLeft", label: "≡L", title: "Align Left" },
           { cmd: "justifyCenter", label: "≡C", title: "Align Center" },
-          { cmd: "justifyRight",  label: "≡R", title: "Align Right" },
-          { cmd: "justifyFull",   label: "≡J", title: "Justify" },
+          { cmd: "justifyRight", label: "≡R", title: "Align Right" },
+          { cmd: "justifyFull", label: "≡J", title: "Justify" },
         ].map(({ cmd, label, title }) => (
           <button
             key={cmd}
             type="button"
             title={title}
-            onMouseDown={(e) => { e.preventDefault(); exec(cmd); }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec(cmd);
+            }}
             style={{ ...btnStyle(cmd), fontSize: 10 }}
           >
             {label}
@@ -1977,14 +2016,26 @@ const ParagraphEditor = ({ value, onChange }) => {
         {/* Lists */}
         {[
           { cmd: "insertUnorderedList", label: "• List", title: "Bullet List" },
-          { cmd: "insertOrderedList",   label: "1. List", title: "Numbered List" },
+          {
+            cmd: "insertOrderedList",
+            label: "1. List",
+            title: "Numbered List",
+          },
         ].map(({ cmd, label, title }) => (
           <button
             key={cmd}
             type="button"
             title={title}
-            onMouseDown={(e) => { e.preventDefault(); exec(cmd); }}
-            style={{ ...btnStyle(cmd), width: "auto", padding: "0 8px", fontSize: 10 }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec(cmd);
+            }}
+            style={{
+              ...btnStyle(cmd),
+              width: "auto",
+              padding: "0 8px",
+              fontSize: 10,
+            }}
           >
             {label}
           </button>
@@ -1995,14 +2046,28 @@ const ParagraphEditor = ({ value, onChange }) => {
         {/* Font size */}
         <select
           title="Font Size"
-          style={{ fontSize: 11, border: "1px solid #e2e8f0", borderRadius: 5, padding: "2px 4px", background: "#f8fafc", color: "#475569" }}
+          style={{
+            fontSize: 11,
+            border: "1px solid #e2e8f0",
+            borderRadius: 5,
+            padding: "2px 4px",
+            background: "#f8fafc",
+            color: "#475569",
+          }}
           onMouseDown={(e) => e.stopPropagation()}
-          onChange={(e) => { exec("fontSize", e.target.value); e.target.value = ""; }}
+          onChange={(e) => {
+            exec("fontSize", e.target.value);
+            e.target.value = "";
+          }}
           defaultValue=""
         >
-          <option value="" disabled>Size</option>
-          {[1,2,3,4,5,6,7].map((s) => (
-            <option key={s} value={s}>{["8","10","12","14","18","24","36"][s-1]}px</option>
+          <option value="" disabled>
+            Size
+          </option>
+          {[1, 2, 3, 4, 5, 6, 7].map((s) => (
+            <option key={s} value={s}>
+              {["8", "10", "12", "14", "18", "24", "36"][s - 1]}px
+            </option>
           ))}
         </select>
       </div>
@@ -2015,7 +2080,15 @@ const ParagraphEditor = ({ value, onChange }) => {
         onInput={() => onChange(ref.current?.innerHTML || "")}
         onKeyUp={updateActiveFormats}
         onMouseUp={updateActiveFormats}
-        style={{ minHeight: 80, padding: "10px 12px", fontSize: 13, color: "#0f172a", outline: "none", lineHeight: 1.6, fontFamily: "'DM Sans', system-ui" }}
+        style={{
+          minHeight: 80,
+          padding: "10px 12px",
+          fontSize: 13,
+          color: "#0f172a",
+          outline: "none",
+          lineHeight: 1.6,
+          fontFamily: "'DM Sans', system-ui",
+        }}
         data-placeholder="Type your paragraph/instructions here…"
       />
       <style>{`
@@ -2299,6 +2372,12 @@ const FormCreator = () => {
 
   const allowedRespondents = splitList(form.allowedRespondentsText);
 
+  const stripBase64 = (str) => {
+    if (!str) return "";
+    if (str.startsWith("data:")) return ""; // remove base64, keep only URLs
+    return str;
+  };
+
   const buildContentPayload = () => ({
     title: form.title,
     displayTitle: form.showTitleToUser ? form.displayTitle || form.title : "",
@@ -2316,16 +2395,21 @@ const FormCreator = () => {
     collectsCompanyDetails: form.collectsCompanyDetails,
     companyDetailsRequired: form.companyDetailsRequired,
     personalizations: form.personalizations,
+    imageUrl: stripBase64(form.imageUrl),
     questions: form.questions
-      .filter((q) => q.prompt && q.prompt.trim())
+      .filter((q) => q.type === "paragraph" || (q.prompt && q.prompt.trim()))
       .map((q) => ({
-        ...q,
+        id: q.id,
+        prompt: q.prompt,
+        type: q.type,
+        required: q.required,
         options: splitList(q.optionsText),
         answerTemplates: splitList(q.answerTemplatesText),
         allowCustomText:
           q.type === "multiple-choice" || q.type === "single-choice"
             ? !!q.allowCustomText
             : false,
+        imageUrl: stripBase64(q.imageUrl || ""),
       })),
     nominationTable: {
       enabled: form.nominationTable.enabled,
@@ -3147,10 +3231,31 @@ const FormCreator = () => {
                               onChange={(e) => {
                                 const file = e.target.files[0];
                                 if (!file) return;
-                                const reader = new FileReader();
-                                reader.onload = (ev) =>
-                                  updateField("imageUrl", ev.target.result);
-                                reader.readAsDataURL(file);
+                                const img = new Image();
+                                const objectUrl = URL.createObjectURL(file);
+                                img.onload = () => {
+                                  URL.revokeObjectURL(objectUrl);
+                                  const canvas =
+                                    document.createElement("canvas");
+                                  const MAX = 800;
+                                  let w = img.width;
+                                  let h = img.height;
+                                  if (w > MAX) {
+                                    h = Math.round((h * MAX) / w);
+                                    w = MAX;
+                                  }
+                                  canvas.width = w;
+                                  canvas.height = h;
+                                  canvas
+                                    .getContext("2d")
+                                    .drawImage(img, 0, 0, w, h);
+                                  const compressed = canvas.toDataURL(
+                                    "image/jpeg",
+                                    0.7,
+                                  );
+                                  updateField("imageUrl", compressed);
+                                };
+                                img.src = objectUrl;
                               }}
                             />
                           </label>
@@ -4084,14 +4189,35 @@ const FormCreator = () => {
                                   onChange={(e) => {
                                     const file = e.target.files[0];
                                     if (!file) return;
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) =>
+                                    const img = new Image();
+                                    const objectUrl = URL.createObjectURL(file);
+                                    img.onload = () => {
+                                      URL.revokeObjectURL(objectUrl);
+                                      const canvas =
+                                        document.createElement("canvas");
+                                      const MAX = 600;
+                                      let w = img.width;
+                                      let h = img.height;
+                                      if (w > MAX) {
+                                        h = Math.round((h * MAX) / w);
+                                        w = MAX;
+                                      }
+                                      canvas.width = w;
+                                      canvas.height = h;
+                                      canvas
+                                        .getContext("2d")
+                                        .drawImage(img, 0, 0, w, h);
+                                      const compressed = canvas.toDataURL(
+                                        "image/jpeg",
+                                        0.65,
+                                      );
                                       updateQuestion(
                                         idx,
                                         "imageUrl",
-                                        ev.target.result,
+                                        compressed,
                                       );
-                                    reader.readAsDataURL(file);
+                                    };
+                                    img.src = objectUrl;
                                   }}
                                 />
                               </label>
@@ -4140,7 +4266,7 @@ const FormCreator = () => {
                               >
                                 <input
                                   type="checkbox"
-                                  checked={q.allowCustomText !== false}
+                                  checked={q.allowCustomText === true}
                                   onChange={(e) =>
                                     updateQuestion(
                                       idx,

@@ -873,9 +873,8 @@ const NominationTableSection = ({
 
   const institutionValue = ntInstitution;
   const coordinatorValue = ntCoordinator;
-  const institutionLocked =
-    (isPersonalizedLink || gateVerified) && Boolean(ntInstitution);
-  const coordinatorLocked = false; // Coordinator is always user-editable
+  const institutionLocked = false;
+  const coordinatorLocked = false;
 
   return (
     <section style={S.card}>
@@ -925,16 +924,7 @@ const NominationTableSection = ({
           </label>
           <input
             className="form-input"
-            style={{
-              ...S.input,
-              ...(institutionLocked && institutionValue
-                ? {
-                    background: "#f9fafb",
-                    color: "#6b7280",
-                    cursor: "not-allowed",
-                  }
-                : {}),
-            }}
+            style={S.input}
             placeholder="Enter institution name"
             value={institutionValue}
             readOnly={institutionLocked}
@@ -942,9 +932,6 @@ const NominationTableSection = ({
               if (!institutionLocked) setNtInstitution(e.target.value);
             }}
           />
-          {institutionLocked && (
-            <span style={S.prefillNote}>✓ Pre-filled from your profile</span>
-          )}
         </div>
         <div style={S.fieldGroup}>
           <label style={S.label}>
@@ -965,10 +952,8 @@ const NominationTableSection = ({
             placeholder="Enter coordinator name"
             value={coordinatorValue}
             readOnly={coordinatorLocked}
-            onChange={(e) => setNtCoordinator(e.target.value)}
             onChange={(e) => {
-              if (!(isLocked && Boolean(coordinatorValue)))
-                setNtCoordinator(e.target.value);
+              setNtCoordinator(e.target.value);
             }}
           />
         </div>
@@ -1532,22 +1517,31 @@ const PublicFeedbackForm = () => {
   const isRestricted = form.visibility === "restricted" || isPersonalizedLink;
   const greetingName = prefillGreeting || "";
 
-  /**
-   * GREETING RULES:
-   * - Restricted + has name → "Hey {firstName}, we'd love your feedback"
-   * - Restricted + no name → "We'd love your feedback"
-   * - Public → "Share your {formTypeLabel} feedback"  (form-type, NOT title)
-   */
-  const greetingText = isRestricted
-    ? greetingName
-      ? `👋 Hey ${greetingName}, we'd love your feedback`
-      : "We'd love your feedback"
-    : `Share your ${formTypeLabel} feedback`;
+  const FEEDBACK_FORM_TYPES = ["webinar", "event", "flash", "internal"];
+  const isFeedbackForm = FEEDBACK_FORM_TYPES.includes(form.formType);
 
-  /**
-   * DISPLAY TITLE: Only shown if showTitleToUser is explicitly true.
-   * Uses displayTitle if set; falls back to title.
-   */
+  const FORM_GREETINGS = {
+    nomination: greetingName
+      ? `👋 Hey ${greetingName}, submit your nomination`
+      : "Submit Your Nomination",
+    assessment: greetingName
+      ? `👋 Hey ${greetingName}, complete your assessment`
+      : "Complete Your Assessment",
+    survey: greetingName
+      ? `👋 Hey ${greetingName}, share your thoughts`
+      : "Share Your Thoughts",
+  };
+
+  const greetingText = isRestricted
+    ? FORM_GREETINGS[form.formType] ||
+      (greetingName
+        ? `👋 Hey ${greetingName}, we'd love your feedback`
+        : "We'd love your feedback")
+    : isFeedbackForm
+      ? `Share your ${formTypeLabel} feedback`
+      : FORM_GREETINGS[form.formType] ||
+        (greetingName ? `👋 Hey ${greetingName}` : "");
+
   const showTitle = form.showTitleToUser === true;
   const displayTitle = showTitle
     ? form.displayTitle?.trim()
@@ -1555,10 +1549,6 @@ const PublicFeedbackForm = () => {
       : form.title
     : null;
 
-  /**
-   * DESCRIPTION: Only shown if showDescription is not false AND description exists.
-   * Admin sets showDescription=false to hide even when description is filled in.
-   */
   const showDescription =
     form.showDescription !== false && Boolean(form.description?.trim());
 
@@ -1637,7 +1627,7 @@ const PublicFeedbackForm = () => {
           {displayTitle && <h2 style={S.heroTitle}>{displayTitle}</h2>}
 
           {/* Greeting */}
-          <p style={S.greeting}>{greetingText}</p>
+          {greetingText && <p style={S.greeting}>{greetingText}</p>}
 
           {/* Optional description */}
           {showDescription && (
@@ -1736,7 +1726,28 @@ const PublicFeedbackForm = () => {
               <div
                 style={{
                   height: "100%",
-                  width: "0%",
+                  width: `${Math.round(
+                    (form.questions.filter((q) => {
+                      if (q.type === "paragraph") return false;
+                      const ans = answers[q.id];
+                      if (!ans && ans !== 0) return false;
+                      if (typeof ans === "string") return ans.trim().length > 0;
+                      if (typeof ans === "object" && !Array.isArray(ans)) {
+                        return (
+                          ans.selected?.length > 0 ||
+                          ans.customText?.trim().length > 0
+                        );
+                      }
+                      if (Array.isArray(ans)) return ans.length > 0;
+                      return Boolean(ans);
+                    }).length /
+                      Math.max(
+                        form.questions.filter((q) => q.type !== "paragraph")
+                          .length,
+                        1,
+                      )) *
+                      100,
+                  )}%`,
                   background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
                   borderRadius: 99,
                   transition: "width 0.4s",
@@ -2200,6 +2211,18 @@ const PublicFeedbackForm = () => {
                   <div
                     style={{ display: "flex", flexDirection: "column", gap: 8 }}
                   >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "#9ca3af",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        marginBottom: 2,
+                      }}
+                    >
+                      Select one
+                    </div>
                     {(q.options || []).map((opt, optIdx) => {
                       const selected = answers[q.id] === opt;
                       const letter = String.fromCharCode(65 + optIdx);
@@ -2210,6 +2233,7 @@ const PublicFeedbackForm = () => {
                           style={{
                             ...S.pollRow,
                             ...(selected ? S.pollRowSelected : {}),
+                            borderRadius: 99,
                           }}
                           onClick={() =>
                             setAnswers({ ...answers, [q.id]: opt })
@@ -2217,12 +2241,20 @@ const PublicFeedbackForm = () => {
                         >
                           <div
                             style={{
-                              ...S.pollLetter,
-                              ...(selected ? S.pollLetterSelected : {}),
+                              width: 20,
+                              height: 20,
+                              borderRadius: "50%",
+                              border: selected
+                                ? "6px solid #6366f1"
+                                : "2px solid #d1d5db",
+                              background: "#fff",
+                              flexShrink: 0,
+                              transition: "all 0.15s",
+                              boxShadow: selected
+                                ? "0 0 0 3px rgba(99,102,241,0.15)"
+                                : "none",
                             }}
-                          >
-                            {letter}
-                          </div>
+                          />
 
                           <input
                             type="radio"
@@ -2262,7 +2294,7 @@ const PublicFeedbackForm = () => {
                     })}
 
                     {/* ONLY wrap custom text section */}
-                    {q.allowCustomText !== false && (
+                    {q.allowCustomText === true && (
                       <>
                         <div
                           style={{
@@ -2323,6 +2355,18 @@ const PublicFeedbackForm = () => {
                   <div
                     style={{ display: "flex", flexDirection: "column", gap: 8 }}
                   >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "#9ca3af",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        marginBottom: 2,
+                      }}
+                    >
+                      Select all that apply
+                    </div>
                     {(q.options || []).map((opt, optIdx) => {
                       const val =
                         answers[q.id] &&
@@ -2366,12 +2410,33 @@ const PublicFeedbackForm = () => {
                         >
                           <div
                             style={{
-                              ...S.pollLetter,
-                              ...(selected ? S.pollLetterSelected : {}),
+                              width: 20,
+                              height: 20,
                               borderRadius: 5,
+                              border: selected
+                                ? "2px solid #6366f1"
+                                : "2px solid #d1d5db",
+                              background: selected ? "#6366f1" : "#fff",
+                              flexShrink: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              transition: "all 0.15s",
                             }}
                           >
-                            {letter}
+                            {selected && (
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="white"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
                           </div>
 
                           <input
@@ -2410,7 +2475,7 @@ const PublicFeedbackForm = () => {
                     })}
 
                     {/* ONLY wrap custom textarea section */}
-                    {q.allowCustomText !== false && (
+                    {q.allowCustomText === true && (
                       <>
                         <div
                           style={{

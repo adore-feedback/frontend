@@ -13,6 +13,14 @@ export const AuthProvider = ({ children }) => {
     // ── 1. Set up interceptor FIRST before any fetch ──
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
+      // Auto-inject credentials for all API calls
+      if (typeof args[0] === "string" && args[0].includes("/api/")) {
+        if (typeof args[1] === "object") {
+          args[1] = { ...args[1], credentials: "include" };
+        } else {
+          args[1] = { credentials: "include" };
+        }
+      }
       const response = await originalFetch(...args);
       const url = args[0]?.toString() || "";
       const isApiCall = url.includes("/api/");
