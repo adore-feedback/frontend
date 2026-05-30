@@ -2133,6 +2133,7 @@ const SectionActions = ({ isDirty, isSaving, onSaveDraft }) => (
 /* ═══ FormCreator ═══════════════════════════════════ */
 const FormCreator = () => {
   const [showGFImporter, setShowGFImporter] = useState(false);
+  const [nominationTablePosition, setNominationTablePosition] = useState(0);
   const { user } = useAuth();
   const basePath =
     user?.role === "super_admin"
@@ -3862,12 +3863,12 @@ const FormCreator = () => {
                   />
 
                   {/* ── Nomination Table Builder — only for Nomination Form type ── */}
-                  {form.formType === "nomination" && (
+                  {/* {form.formType === "nomination" && (
                     <NominationTableBuilder
                       value={form.nominationTable}
                       onChange={(val) => updateField("nominationTable", val)}
                     />
-                  )}
+                  )} */}
 
                   <div className="fc-divider" style={{ margin: "16px 0" }} />
 
@@ -3921,409 +3922,553 @@ const FormCreator = () => {
                   </button>
 
                   {/* ── Question list ── */}
+                  {/* ── Question list (with movable Nomination Table) ── */}
                   <div className="fc-q-list">
-                    {form.questions.map((q, idx) => (
-                      <div key={idx} className="fc-q-card">
-                        <div className="fc-q-head">
-                          <div className="fc-q-meta">
-                            <span className="fc-q-num">{idx + 1}</span>
-                            <span style={{ fontSize: 15 }}>
-                              {QTYPE_ICONS[q.type] || "❓"}
-                            </span>
-                            <span className="fc-q-type-label">{q.type}</span>
-                          </div>
-                          <div className="fc-q-controls">
-                            <button
-                              type="button"
-                              className="fc-q-icon-btn"
-                              onClick={() => moveQuestion(idx, -1)}
-                              disabled={idx === 0}
-                              title="Move up"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              className="fc-q-icon-btn"
-                              onClick={() => moveQuestion(idx, 1)}
-                              disabled={idx === form.questions.length - 1}
-                              title="Move down"
-                            >
-                              ↓
-                            </button>
-                            <button
-                              type="button"
-                              className={`fc-save-tpl-btn ${savingTplIdx === idx ? "fc-save-tpl-btn--saved" : ""}`}
-                              title={
-                                q.prompt.trim()
-                                  ? "Save as reusable template"
-                                  : "Enter a prompt first"
-                              }
-                              onClick={() => handleSaveAsTemplate(idx)}
-                              disabled={!q.prompt.trim()}
-                            >
-                              {savingTplIdx === idx ? (
-                                <>
-                                  <svg
-                                    width="11"
-                                    height="11"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    strokeLinecap="round"
-                                  >
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>{" "}
-                                  Saved!
-                                </>
-                              ) : (
-                                <>
-                                  <svg
-                                    width="11"
-                                    height="11"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    strokeLinecap="round"
-                                  >
-                                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-                                    <polyline points="17 21 17 13 7 13 7 21" />
-                                  </svg>{" "}
-                                  Save as Template
-                                </>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              className="fc-q-icon-btn fc-q-icon-btn--danger"
-                              onClick={() => removeQuestion(idx)}
-                              title="Remove question"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
+                    {(() => {
+                      // Total slots = questions + (1 if nomination form)
+                      const isNomForm = form.formType === "nomination";
+                      const totalSlots =
+                        form.questions.length + (isNomForm ? 1 : 0);
+                      // Clamp position to valid range
+                      const nomPos = Math.min(
+                        nominationTablePosition,
+                        Math.max(0, totalSlots - 1),
+                      );
 
-                        {q.type === "paragraph" ? (
-                          <div style={{ padding: "4px 0" }}>
-                            <label
-                              className="fc-label"
-                              style={{ marginBottom: 6, display: "block" }}
-                            >
-                              Paragraph Content
-                            </label>
-                            <ParagraphEditor
-                              value={q.prompt}
-                              onChange={(val) =>
-                                updateQuestion(idx, "prompt", val)
-                              }
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              flexWrap: "wrap",
-                              padding: "4px 0",
-                            }}
-                          >
-                            <input
-                              className="fc-input"
-                              required
-                              style={{
-                                flex: "1 1 200px",
-                                minWidth: 140,
-                                fontSize: 13,
-                              }}
-                              value={q.prompt}
-                              onChange={(e) =>
-                                updateQuestion(idx, "prompt", e.target.value)
-                              }
-                              placeholder="Type your question…"
-                            />
-                            <label
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 5,
-                                cursor: "pointer",
-                                flexShrink: 0,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: "#64748b",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={q.required}
-                                onChange={(e) =>
-                                  updateQuestion(
-                                    idx,
-                                    "required",
-                                    e.target.checked,
-                                  )
-                                }
-                                style={{
-                                  width: 14,
-                                  height: 14,
-                                  accentColor: "#3b82f6",
-                                  cursor: "pointer",
-                                }}
-                              />
-                              Required
-                            </label>
-                            <select
-                              className="fc-input"
-                              style={{ width: "auto", flexShrink: 0 }}
-                              value={q.type}
-                              onChange={(e) =>
-                                updateQuestion(idx, "type", e.target.value)
-                              }
-                            >
-                              <option value="text">✍️ Text Answer</option>
-                              <option value="rating">⭐ Rating</option>
-                              <option value="single-choice">
-                                🔘 Single Choice
-                              </option>
-                              <option value="multiple-choice">
-                                ☑️ Multi Choice
-                              </option>
-                              <option value="paragraph">
-                                📝 Text Block (no answer)
-                              </option>
-                              <option value="file-upload">
-                                📎 File Upload
-                              </option>
-                            </select>
-                          </div>
-                        )}
+                      const rendered = [];
+                      let qCursor = 0; // tracks which question we're rendering next
 
-                        {/* Optional question image */}
-                        {q.type !== "paragraph" && (
-                          <div style={{ marginTop: 8 }}>
-                            {q.imageUrl ? (
-                              <div
-                                style={{
-                                  position: "relative",
-                                  display: "inline-block",
-                                  maxWidth: 320,
-                                }}
-                              >
-                                <img
-                                  src={q.imageUrl}
-                                  alt="Question visual"
-                                  style={{
-                                    width: "100%",
-                                    maxHeight: 140,
-                                    objectFit: "cover",
-                                    borderRadius: 8,
-                                    border: "1.5px solid #e8ecf0",
-                                    display: "block",
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateQuestion(idx, "imageUrl", "")
-                                  }
-                                  style={{
-                                    position: "absolute",
-                                    top: 6,
-                                    right: 6,
-                                    width: 24,
-                                    height: 24,
-                                    borderRadius: "50%",
-                                    background: "rgba(0,0,0,0.6)",
-                                    border: "none",
-                                    color: "#fff",
-                                    cursor: "pointer",
-                                    fontSize: 16,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ) : (
-                              <label
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                  background: "#f8fafc",
-                                  border: "1.5px dashed #cbd5e1",
-                                  borderRadius: 8,
-                                  padding: "5px 12px",
-                                  cursor: "pointer",
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                  color: "#94a3b8",
-                                }}
-                              >
-                                <svg
-                                  width="12"
-                                  height="12"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                >
-                                  <rect
-                                    x="3"
-                                    y="3"
-                                    width="18"
-                                    height="18"
-                                    rx="2"
-                                  />
-                                  <circle cx="8.5" cy="8.5" r="1.5" />
-                                  <polyline points="21 15 16 10 5 21" />
-                                </svg>
-                                Add image to question (optional)
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  style={{ display: "none" }}
-                                  onChange={(e) => {
-                                    const file = e.target.files[0];
-                                    if (!file) return;
-                                    const img = new Image();
-                                    const objectUrl = URL.createObjectURL(file);
-                                    img.onload = () => {
-                                      URL.revokeObjectURL(objectUrl);
-                                      const canvas =
-                                        document.createElement("canvas");
-                                      const MAX = 600;
-                                      let w = img.width;
-                                      let h = img.height;
-                                      if (w > MAX) {
-                                        h = Math.round((h * MAX) / w);
-                                        w = MAX;
-                                      }
-                                      canvas.width = w;
-                                      canvas.height = h;
-                                      canvas
-                                        .getContext("2d")
-                                        .drawImage(img, 0, 0, w, h);
-                                      const compressed = canvas.toDataURL(
-                                        "image/jpeg",
-                                        0.65,
-                                      );
-                                      updateQuestion(
-                                        idx,
-                                        "imageUrl",
-                                        compressed,
-                                      );
-                                    };
-                                    img.src = objectUrl;
-                                  }}
-                                />
-                              </label>
-                            )}
-                          </div>
-                        )}
-
-                        {(q.type === "single-choice" ||
-                          q.type === "multiple-choice") && (
-                          <div style={{ marginTop: 10 }}>
-                            <label
-                              className="fc-label"
-                              style={{ marginBottom: 8, display: "block" }}
-                            >
-                              Options
-                              {q.type === "multiple-choice" && (
-                                <span className="fc-badge-multi">
-                                  Multi-select enabled
-                                </span>
-                              )}
-                            </label>
-                            <PollOptionsEditor
-                              value={q.optionsText}
-                              onChange={(val) =>
-                                updateQuestion(idx, "optionsText", val)
-                              }
-                            />
+                      for (let slot = 0; slot < totalSlots; slot++) {
+                        // Should nomination table go here?
+                        if (isNomForm && slot === nomPos) {
+                          rendered.push(
                             <div
-                              style={{
-                                marginTop: 10,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                              }}
+                              key="__nomination_table__"
+                              style={{ marginBottom: 4 }}
                             >
-                              <label
+                              {/* ── Position controls ── */}
+                              <div
                                 style={{
                                   display: "flex",
                                   alignItems: "center",
                                   gap: 6,
-                                  cursor: "pointer",
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  color: "#64748b",
+                                  marginBottom: 8,
+                                  padding: "6px 10px",
+                                  background: "#fffbeb",
+                                  border: "1px solid #fde68a",
+                                  borderRadius: 8,
                                 }}
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={q.allowCustomText === true}
-                                  onChange={(e) =>
-                                    updateQuestion(
-                                      idx,
-                                      "allowCustomText",
-                                      e.target.checked,
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#92400e",
+                                    flex: 1,
+                                  }}
+                                >
+                                  📋 Nomination Table — drag to reorder
+                                </span>
+                                <button
+                                  type="button"
+                                  className="fc-q-icon-btn"
+                                  disabled={nomPos === 0}
+                                  onClick={() =>
+                                    setNominationTablePosition((p) =>
+                                      Math.max(0, p - 1),
                                     )
                                   }
+                                  title="Move table up"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  className="fc-q-icon-btn"
+                                  disabled={nomPos >= totalSlots - 1}
+                                  onClick={() =>
+                                    setNominationTablePosition((p) =>
+                                      Math.min(totalSlots - 1, p + 1),
+                                    )
+                                  }
+                                  title="Move table down"
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                              <NominationTableBuilder
+                                value={form.nominationTable}
+                                onChange={(val) =>
+                                  updateField("nominationTable", val)
+                                }
+                              />
+                            </div>,
+                          );
+                        } else {
+                          // Render the next question
+                          const idx = qCursor;
+                          qCursor++;
+                          const q = form.questions[idx];
+                          if (!q) continue;
+
+                          rendered.push(
+                            <div key={`q-${idx}`} className="fc-q-card">
+                              <div className="fc-q-head">
+                                <div className="fc-q-meta">
+                                  <span className="fc-q-num">{idx + 1}</span>
+                                  <span style={{ fontSize: 15 }}>
+                                    {QTYPE_ICONS[q.type] || "❓"}
+                                  </span>
+                                  <span className="fc-q-type-label">
+                                    {q.type}
+                                  </span>
+                                </div>
+                                <div className="fc-q-controls">
+                                  <button
+                                    type="button"
+                                    className="fc-q-icon-btn"
+                                    onClick={() => moveQuestion(idx, -1)}
+                                    disabled={idx === 0}
+                                    title="Move up"
+                                  >
+                                    ↑
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="fc-q-icon-btn"
+                                    onClick={() => moveQuestion(idx, 1)}
+                                    disabled={idx === form.questions.length - 1}
+                                    title="Move down"
+                                  >
+                                    ↓
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`fc-save-tpl-btn ${savingTplIdx === idx ? "fc-save-tpl-btn--saved" : ""}`}
+                                    title={
+                                      q.prompt.trim()
+                                        ? "Save as reusable template"
+                                        : "Enter a prompt first"
+                                    }
+                                    onClick={() => handleSaveAsTemplate(idx)}
+                                    disabled={!q.prompt.trim()}
+                                  >
+                                    {savingTplIdx === idx ? (
+                                      <>
+                                        <svg
+                                          width="11"
+                                          height="11"
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2.5"
+                                          strokeLinecap="round"
+                                        >
+                                          <polyline points="20 6 9 17 4 12" />
+                                        </svg>{" "}
+                                        Saved!
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg
+                                          width="11"
+                                          height="11"
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2.5"
+                                          strokeLinecap="round"
+                                        >
+                                          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                                          <polyline points="17 21 17 13 7 13 7 21" />
+                                        </svg>{" "}
+                                        Save as Template
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="fc-q-icon-btn fc-q-icon-btn--danger"
+                                    onClick={() => removeQuestion(idx)}
+                                    title="Remove question"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+
+                              {q.type === "paragraph" ? (
+                                <div style={{ padding: "4px 0" }}>
+                                  <label
+                                    className="fc-label"
+                                    style={{
+                                      marginBottom: 6,
+                                      display: "block",
+                                    }}
+                                  >
+                                    Paragraph Content
+                                  </label>
+                                  <ParagraphEditor
+                                    value={q.prompt}
+                                    onChange={(val) =>
+                                      updateQuestion(idx, "prompt", val)
+                                    }
+                                  />
+                                </div>
+                              ) : (
+                                <div
                                   style={{
-                                    width: 13,
-                                    height: 13,
-                                    accentColor: "#7c3aed",
-                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    flexWrap: "wrap",
+                                    padding: "4px 0",
                                   }}
-                                />
-                                Allow "add your own answer" text box
-                              </label>
-                            </div>
-                          </div>
-                        )}
+                                >
+                                  <input
+                                    className="fc-input"
+                                    required
+                                    style={{
+                                      flex: "1 1 200px",
+                                      minWidth: 140,
+                                      fontSize: 13,
+                                    }}
+                                    value={q.prompt}
+                                    onChange={(e) =>
+                                      updateQuestion(
+                                        idx,
+                                        "prompt",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Type your question…"
+                                  />
+                                  <label
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 5,
+                                      cursor: "pointer",
+                                      flexShrink: 0,
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      color: "#64748b",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={q.required}
+                                      onChange={(e) =>
+                                        updateQuestion(
+                                          idx,
+                                          "required",
+                                          e.target.checked,
+                                        )
+                                      }
+                                      style={{
+                                        width: 14,
+                                        height: 14,
+                                        accentColor: "#3b82f6",
+                                        cursor: "pointer",
+                                      }}
+                                    />
+                                    Required
+                                  </label>
+                                  <select
+                                    className="fc-input"
+                                    style={{ width: "auto", flexShrink: 0 }}
+                                    value={q.type}
+                                    onChange={(e) =>
+                                      updateQuestion(
+                                        idx,
+                                        "type",
+                                        e.target.value,
+                                      )
+                                    }
+                                  >
+                                    <option value="text">✍️ Text Answer</option>
+                                    <option value="rating">⭐ Rating</option>
+                                    <option value="single-choice">
+                                      🔘 Single Choice
+                                    </option>
+                                    <option value="multiple-choice">
+                                      ☑️ Multi Choice
+                                    </option>
+                                    <option value="paragraph">
+                                      📝 Text Block (no answer)
+                                    </option>
+                                    <option value="file-upload">
+                                      📎 File Upload
+                                    </option>
+                                  </select>
+                                </div>
+                              )}
 
-                        {q.type !== "paragraph" && (
-                          <div style={{ marginTop: 10 }}>
-                            <label className="fc-label">
-                              Suggested Answer Templates{" "}
-                              <span className="fc-hint">(comma-separated)</span>
-                            </label>
-                            <textarea
-                              className="fc-input fc-textarea"
-                              style={{ height: 52 }}
-                              placeholder="Great session!, The speaker was excellent…"
-                              value={q.answerTemplatesText}
-                              onChange={(e) =>
-                                updateQuestion(
-                                  idx,
-                                  "answerTemplatesText",
-                                  e.target.value,
-                                )
-                              }
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                              {/* Question image upload */}
+                              {q.type !== "paragraph" && (
+                                <div style={{ marginTop: 8 }}>
+                                  {q.imageUrl ? (
+                                    <div
+                                      style={{
+                                        position: "relative",
+                                        display: "inline-block",
+                                        maxWidth: 320,
+                                      }}
+                                    >
+                                      <img
+                                        src={q.imageUrl}
+                                        alt="Question visual"
+                                        style={{
+                                          width: "100%",
+                                          maxHeight: 140,
+                                          objectFit: "cover",
+                                          borderRadius: 8,
+                                          border: "1.5px solid #e8ecf0",
+                                          display: "block",
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateQuestion(idx, "imageUrl", "")
+                                        }
+                                        style={{
+                                          position: "absolute",
+                                          top: 6,
+                                          right: 6,
+                                          width: 24,
+                                          height: 24,
+                                          borderRadius: "50%",
+                                          background: "rgba(0,0,0,0.6)",
+                                          border: "none",
+                                          color: "#fff",
+                                          cursor: "pointer",
+                                          fontSize: 16,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        background: "#f8fafc",
+                                        border: "1.5px dashed #cbd5e1",
+                                        borderRadius: 8,
+                                        padding: "5px 12px",
+                                        cursor: "pointer",
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        color: "#94a3b8",
+                                      }}
+                                    >
+                                      <svg
+                                        width="12"
+                                        height="12"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                      >
+                                        <rect
+                                          x="3"
+                                          y="3"
+                                          width="18"
+                                          height="18"
+                                          rx="2"
+                                        />
+                                        <circle cx="8.5" cy="8.5" r="1.5" />
+                                        <polyline points="21 15 16 10 5 21" />
+                                      </svg>
+                                      Add image to question (optional)
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        style={{ display: "none" }}
+                                        onChange={(e) => {
+                                          const file = e.target.files[0];
+                                          if (!file) return;
+                                          const img = new Image();
+                                          const objectUrl =
+                                            URL.createObjectURL(file);
+                                          img.onload = () => {
+                                            URL.revokeObjectURL(objectUrl);
+                                            const canvas =
+                                              document.createElement("canvas");
+                                            const MAX = 600;
+                                            let w = img.width;
+                                            let h = img.height;
+                                            if (w > MAX) {
+                                              h = Math.round((h * MAX) / w);
+                                              w = MAX;
+                                            }
+                                            canvas.width = w;
+                                            canvas.height = h;
+                                            canvas
+                                              .getContext("2d")
+                                              .drawImage(img, 0, 0, w, h);
+                                            updateQuestion(
+                                              idx,
+                                              "imageUrl",
+                                              canvas.toDataURL(
+                                                "image/jpeg",
+                                                0.65,
+                                              ),
+                                            );
+                                          };
+                                          img.src = objectUrl;
+                                        }}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+                              )}
 
-                    {form.questions.length === 0 && (
-                      <div className="fc-empty-q">
-                        <span style={{ fontSize: 36 }}>❓</span>
-                        <p>
-                          No questions yet. Add one or use a template above.
-                        </p>
-                      </div>
-                    )}
+                              {/* File upload info */}
+                              {q.type === "file-upload" && (
+                                <div
+                                  style={{
+                                    marginTop: 8,
+                                    padding: "10px 14px",
+                                    background: "#f8fafc",
+                                    border: "1.5px dashed #cbd5e1",
+                                    borderRadius: 9,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: 12,
+                                      color: "#64748b",
+                                      fontWeight: 600,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 6,
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 16 }}>📎</span>
+                                    File Upload — respondents can upload images,
+                                    PDFs, Word, Excel (max 10MB)
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Choice options */}
+                              {(q.type === "single-choice" ||
+                                q.type === "multiple-choice") && (
+                                <div style={{ marginTop: 10 }}>
+                                  <label
+                                    className="fc-label"
+                                    style={{
+                                      marginBottom: 8,
+                                      display: "block",
+                                    }}
+                                  >
+                                    Options
+                                    {q.type === "multiple-choice" && (
+                                      <span className="fc-badge-multi">
+                                        Multi-select enabled
+                                      </span>
+                                    )}
+                                  </label>
+                                  <PollOptionsEditor
+                                    value={q.optionsText}
+                                    onChange={(val) =>
+                                      updateQuestion(idx, "optionsText", val)
+                                    }
+                                  />
+                                  <div
+                                    style={{
+                                      marginTop: 10,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <label
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        cursor: "pointer",
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: "#64748b",
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={q.allowCustomText === true}
+                                        onChange={(e) =>
+                                          updateQuestion(
+                                            idx,
+                                            "allowCustomText",
+                                            e.target.checked,
+                                          )
+                                        }
+                                        style={{
+                                          width: 13,
+                                          height: 13,
+                                          accentColor: "#7c3aed",
+                                          cursor: "pointer",
+                                        }}
+                                      />
+                                      Allow "add your own answer" text box
+                                    </label>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Answer templates */}
+                              {q.type !== "paragraph" && (
+                                <div style={{ marginTop: 10 }}>
+                                  <label className="fc-label">
+                                    Suggested Answer Templates{" "}
+                                    <span className="fc-hint">
+                                      (comma-separated)
+                                    </span>
+                                  </label>
+                                  <textarea
+                                    className="fc-input fc-textarea"
+                                    style={{ height: 52 }}
+                                    placeholder="Great session!, The speaker was excellent…"
+                                    value={q.answerTemplatesText}
+                                    onChange={(e) =>
+                                      updateQuestion(
+                                        idx,
+                                        "answerTemplatesText",
+                                        e.target.value,
+                                      )
+                                    }
+                                  />
+                                </div>
+                              )}
+                            </div>,
+                          );
+                        }
+                      }
+
+                      // Empty state
+                      if (rendered.length === 0) {
+                        return (
+                          <div className="fc-empty-q">
+                            <span style={{ fontSize: 36 }}>❓</span>
+                            <p>
+                              No questions yet. Add one or use a template above.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return rendered;
+                    })()}
                   </div>
                 </div>
               )}

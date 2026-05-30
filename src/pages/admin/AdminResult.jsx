@@ -1,4 +1,3 @@
-import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { getFormResults, getForms } from "../../api/feedbackApi";
@@ -9,6 +8,7 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
 });
+
 /* ─── small components ─────────────────────────── */
 const SentimentBadge = ({ sentiment }) => {
   const MAP = {
@@ -89,7 +89,6 @@ const ProgressBar = ({ value, max, color = "#3b82f6" }) => {
   );
 };
 
-/* ── Draft Mode Banner ── */
 const DraftBanner = ({ formTitle, basePath }) => (
   <div className="ar-draft-banner">
     <svg
@@ -114,7 +113,6 @@ const DraftBanner = ({ formTitle, basePath }) => (
   </div>
 );
 
-/* ── Deleted Form Banner ── */
 const DeletedFormBanner = ({ formTitle, basePath }) => (
   <div className="ar-deleted-banner">
     <svg
@@ -157,27 +155,25 @@ const AdminResult = () => {
 
   const [allForms, setAllForms] = useState([]);
   const [formsLoadDone, setFormsLoadDone] = useState(false);
-
   const [result, setResult] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [loadError, setLoadError] = useState("");
-
   const [selectedResponse, setSelectedResponse] = useState(null);
   const [hoveredRow, setHoveredRow] = useState(null);
-
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const searchTimerRef = useRef(null);
 
-  // Form switcher state
+  // ── NEW: Google Sheets export toast state ──
+  const [exportToast, setExportToast] = useState("");
+
   const [formSearchInput, setFormSearchInput] = useState("");
   const [formSearchOpen, setFormSearchOpen] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const formSearchRef = useRef(null);
   const formSearchInputRef = useRef(null);
 
-  /* ── Debounce response search ── */
   useEffect(() => {
     clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(
@@ -187,7 +183,6 @@ const AdminResult = () => {
     return () => clearTimeout(searchTimerRef.current);
   }, [searchInput]);
 
-  /* ── Close form search on outside click or Escape ── */
   useEffect(() => {
     const onMouse = (e) => {
       if (formSearchRef.current && !formSearchRef.current.contains(e.target)) {
@@ -209,7 +204,6 @@ const AdminResult = () => {
     };
   }, []);
 
-  /* ── Load ALL forms including deleted ── */
   useEffect(() => {
     getForms({ includeDeleted: true })
       .then((data) => setAllForms(Array.isArray(data.forms) ? data.forms : []))
@@ -217,13 +211,10 @@ const AdminResult = () => {
       .finally(() => setFormsLoadDone(true));
   }, []);
 
-  /* ── Load results ── */
   useEffect(() => {
     if (!formId) return;
-
     searchQuery ? setIsSearching(true) : setIsLoading(true);
     setLoadError("");
-
     getFormResults(formId, searchQuery ? { search: searchQuery } : {})
       .then((data) => setResult(data))
       .catch((err) => {
@@ -236,7 +227,6 @@ const AdminResult = () => {
       });
   }, [formId, searchQuery]);
 
-  /* ── Redirect to first form when no formId in URL ── */
   useEffect(() => {
     if (!formId && formsLoadDone && allForms.length > 0) {
       navigate(`${basePath}/result/${allForms[0]._id || allForms[0].id}`, {
@@ -245,7 +235,6 @@ const AdminResult = () => {
     }
   }, [formId, formsLoadDone, allForms, navigate, basePath]);
 
-  /* ── Reset search on form switch ── */
   useEffect(() => {
     setSearchInput("");
     setSearchQuery("");
@@ -260,44 +249,69 @@ const AdminResult = () => {
     setSearchQuery("");
   }, []);
 
+  const currentFormFromList = formsLoadDone
+    ? allForms.find((f) => (f._id || f.id) === formId)
+    : null;
+  const isDeletedForm =
+    formsLoadDone &&
+    !!formId &&
+    (currentFormFromList?.status === "deleted" ||
+      (!currentFormFromList && formsLoadDone));
+  const currentForm = result?.form;
+
+  const analytics = result?.analytics || {};
+
   const formatAnswerValue = (value) => {
     if (value == null) return "—";
+    if (typeof value === "object" && !Array.isArray(value) && value.fileName) {
+      return {
+        type: "file",
+        fileName: value.fileName,
+        fileType: value.fileType,
+        fileData: value.fileData,
+        fileSize: value.fileSize,
+      };
+    }
     if (typeof value === "string") return value.trim() ? value : "—";
     if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
   };
 
-  const currentFormFromList = formsLoadDone
-    ? allForms.find((f) => (f._id || f.id) === formId)
-    : null;
+  const handleExport = useCallback(async () => {
+    if (!currentForm) return;
+    const fId = currentForm._id || currentForm.id;
+    if (!fId) return;
 
-  const isDeletedForm =
-    formsLoadDone &&
-    !!formId &&
-    (currentFormFromList?.status === "deleted" ||
-      (!currentFormFromList && formsLoadDone));
+    setExportToast("⏳ Creating your Google Sheet…");
 
-  const currentForm = result?.form;
+    try {
+      const { exportFormToSheet } = await import("../../api/feedbackApi");
+      const result = await exportFormToSheet(fId);
+      window.open(result.url, "_blank", "noopener,noreferrer");
+      setExportToast("✅ Google Sheet created and opened!");
+    } catch (err) {
+      console.error("Export error:", err);
+      setExportToast("❌ Export failed: " + (err.message || "Unknown error"));
+    }
+
+    setTimeout(() => setExportToast(""), 6000);
+  }, [currentForm]);
 
   const STATUS_ORDER = { live: 0, draft: 1, closed: 2, deleted: 3 };
-
   const sortedAllForms = [...allForms].sort((a, b) => {
     const aIsActive = (a._id || a.id) === formId ? -1 : 0;
     const bIsActive = (b._id || b.id) === formId ? -1 : 0;
     if (aIsActive !== bIsActive) return aIsActive - bIsActive;
     return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
   });
-
   const filteredFormList = formSearchInput.trim()
     ? sortedAllForms.filter((f) =>
         f.title.toLowerCase().includes(formSearchInput.toLowerCase().trim()),
       )
     : sortedAllForms;
-
   const activeFormEntry = allForms.find((f) => (f._id || f.id) === formId);
   const otherForms = filteredFormList.filter((f) => (f._id || f.id) !== formId);
-
   const groupedOthers = {
     live: otherForms.filter((f) => f.status === "live"),
     draft: otherForms.filter((f) => f.status === "draft"),
@@ -305,7 +319,6 @@ const AdminResult = () => {
     deleted: otherForms.filter((f) => f.status === "deleted"),
   };
 
-  /* ── Loading / error states ── */
   if (isLoading && !result)
     return (
       <>
@@ -398,7 +411,6 @@ const AdminResult = () => {
       </>
     );
 
-  const analytics = result?.analytics || {};
   const recentResponses = analytics.recentResponses || [];
   const sentimentData = analytics.sentimentBreakdown || [];
   const keywords = analytics.topKeywords || [];
@@ -407,147 +419,8 @@ const AdminResult = () => {
   const completionRate = analytics.completionRate;
   const isDraft = currentForm?.status === "draft";
   const displayed = recentResponses;
-
   const showResponses = isDeletedForm || !isDraft;
 
-  /* ── Export analytics to Excel ── */
-  const handleExport = () => {
-    if (!currentForm) return;
-    const wb = XLSX.utils.book_new();
-    const formTitle = currentForm.title || "Form";
-
-    // ── Sheet 1: Overview (horizontal — headers in Row 1) ──────────────────
-    const overviewHeaders = [
-      "Form Title",
-      "Form Type",
-      "Status",
-      "Total Responses",
-      "Average Rating",
-      "Completion Rate (%)",
-      "Exported At",
-    ];
-    const overviewValues = [
-      formTitle,
-      currentForm.formType || "",
-      isDeletedForm ? "Deleted" : currentForm.status || "",
-      analytics.totalResponses || 0,
-      analytics.averageRating ?? "N/A",
-      analytics.completionRate ?? "N/A",
-      new Date().toLocaleString(),
-    ];
-    const wsOverview = XLSX.utils.aoa_to_sheet([
-      overviewHeaders,
-      overviewValues,
-    ]);
-    wsOverview["!cols"] = overviewHeaders.map(() => ({ wch: 22 }));
-    XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
-
-    // ── Sheet 2: Sentiment Breakdown ───────────────────────────────────────
-    const wsSentiment = XLSX.utils.aoa_to_sheet([
-      ["Sentiment", "Count", "Percentage (%)"],
-      ...(analytics.sentimentBreakdown || []).map((s) => [
-        s.label || s.sentiment,
-        s.count,
-        s.percentage,
-      ]),
-    ]);
-    wsSentiment["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, wsSentiment, "Sentiment");
-
-    // ── Sheet 3: Top Keywords ──────────────────────────────────────────────
-    const wsKeywords = XLSX.utils.aoa_to_sheet([
-      ["Keyword", "Count"],
-      ...(analytics.topKeywords || []).map((k) => [k.keyword, k.count]),
-    ]);
-    wsKeywords["!cols"] = [{ wch: 20 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, wsKeywords, "Top Keywords");
-
-    // ── Sheet 4: Responses — each question gets its own column ─────────────
-    const responses = analytics.recentResponses || [];
-
-    // Collect all unique question prompts in order
-    const allPrompts = [];
-    responses.forEach((r) => {
-      (r.answers || []).forEach((a) => {
-        const prompt = a.prompt || a.questionId || "Question";
-        if (!allPrompts.includes(prompt)) allPrompts.push(prompt);
-      });
-    });
-
-    // Build header row
-    const respHeaders = [
-      "#",
-      "Name",
-      "Email",
-      "Phone",
-      "Company",
-      "Rating",
-      "Sentiment",
-      "Submitted At",
-      ...allPrompts,
-    ];
-
-    // Build data rows
-    const respRows = responses.map((r, i) => {
-      // Map answers by prompt for easy lookup
-      const answerMap = {};
-      (r.answers || []).forEach((a) => {
-        const key = a.prompt || a.questionId || "Question";
-        const val = Array.isArray(a.value)
-          ? a.value.join(", ")
-          : (a.value ?? "");
-        answerMap[key] = val;
-      });
-
-      return [
-        i + 1,
-        r.respondentName || "Anonymous",
-        r.respondentEmail || "",
-        r.respondentPhone || "",
-        r.respondentRole || "",
-        r.rating ?? "",
-        r.sentimentLabel || r.sentiment || "",
-        r.submittedAt ? new Date(r.submittedAt).toLocaleString() : "",
-        ...allPrompts.map((p) => answerMap[p] ?? ""),
-      ];
-    });
-
-    const wsResponses = XLSX.utils.aoa_to_sheet([respHeaders, ...respRows]);
-
-    // Column widths — fixed cols + question cols
-    const fixedWidths = [
-      { wch: 4 },
-      { wch: 22 },
-      { wch: 28 },
-      { wch: 14 },
-      { wch: 20 },
-      { wch: 8 },
-      { wch: 12 },
-      { wch: 22 },
-    ];
-    wsResponses["!cols"] = [
-      ...fixedWidths,
-      ...allPrompts.map(() => ({ wch: 35 })),
-    ];
-
-    // Enable text wrap for answer columns
-    const range = XLSX.utils.decode_range(wsResponses["!ref"] || "A1");
-    for (let R = 1; R <= range.e.r; R++) {
-      for (let C = 8; C < respHeaders.length; C++) {
-        const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
-        if (wsResponses[cellAddr]) {
-          wsResponses[cellAddr].s = { alignment: { wrapText: true } };
-        }
-      }
-    }
-
-    XLSX.utils.book_append_sheet(wb, wsResponses, "Responses");
-
-    const safeTitle = formTitle.replace(/[^a-z0-9]/gi, "_").slice(0, 40);
-    XLSX.writeFile(wb, `${safeTitle}_analytics.xlsx`);
-  };
-
-  /* ── Status dot color ── */
   const STATUS_DOT = {
     live: "#10b981",
     draft: "#f59e0b",
@@ -555,7 +428,6 @@ const AdminResult = () => {
     deleted: "#7c3aed",
   };
 
-  /* ── Render a form item in the switcher list ── */
   const renderFormItem = (f, isPinned = false) => {
     const fId = f._id || f.id;
     const isActive = fId === formId;
@@ -641,6 +513,61 @@ const AdminResult = () => {
     <>
       <style>{CSS}</style>
 
+      {/* ── NEW: Google Sheets export toast ── */}
+      {exportToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#0f172a",
+            color: "#fff",
+            fontSize: 13,
+            fontWeight: 600,
+            padding: "12px 20px",
+            borderRadius: 12,
+            zIndex: 99999,
+            boxShadow: "0 8px 30px rgba(0,0,0,0.25)",
+            maxWidth: "90vw",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            lineHeight: 1.5,
+            animation: "ar-toast-in 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+            fontFamily: "'DM Sans',system-ui,sans-serif",
+          }}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#34d399"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span>{exportToast}</span>
+          <button
+            onClick={() => setExportToast("")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#94a3b8",
+              fontSize: 18,
+              cursor: "pointer",
+              lineHeight: 1,
+              flexShrink: 0,
+              padding: 0,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <main className="ar-main">
         {/* ── Header ── */}
         <div className="ar-top-bar">
@@ -664,7 +591,6 @@ const AdminResult = () => {
             </Link>
             <div ref={formSearchRef} style={{ position: "relative" }}>
               <p className="ar-top-eyebrow">Results for</p>
-
               <button
                 className={`ar-form-switcher-btn${formSearchOpen ? " ar-form-switcher-btn--open" : ""}`}
                 onClick={() => {
@@ -672,9 +598,8 @@ const AdminResult = () => {
                   setFormSearchOpen(next);
                   setFormSearchInput("");
                   setHasSearched(false);
-                  if (next) {
+                  if (next)
                     setTimeout(() => formSearchInputRef.current?.focus(), 50);
-                  }
                 }}
                 title="Switch form"
                 aria-haspopup="listbox"
@@ -703,7 +628,6 @@ const AdminResult = () => {
                 </svg>
               </button>
 
-              {/* ── Search panel ── */}
               {formSearchOpen && (
                 <div className="ar-fsp" role="listbox">
                   <div className="ar-fsp-search">
@@ -756,7 +680,6 @@ const AdminResult = () => {
                       </button>
                     )}
                   </div>
-
                   <div className="ar-fsp-list">
                     {activeFormEntry && (
                       <div className="ar-fsp-group">
@@ -776,7 +699,6 @@ const AdminResult = () => {
                         {renderFormItem(activeFormEntry, true)}
                       </div>
                     )}
-
                     {!hasSearched && !formSearchInput && (
                       <div className="ar-fsp-hint">
                         <svg
@@ -794,7 +716,6 @@ const AdminResult = () => {
                         <span>Type to search all forms</span>
                       </div>
                     )}
-
                     {hasSearched && (
                       <>
                         {filteredFormList.filter(
@@ -868,7 +789,6 @@ const AdminResult = () => {
                       </>
                     )}
                   </div>
-
                   <div className="ar-fsp-footer">
                     <kbd className="ar-fsp-kbd">tab</kbd> navigate &nbsp;·&nbsp;{" "}
                     <kbd className="ar-fsp-kbd">↵</kbd> select &nbsp;·&nbsp;{" "}
@@ -927,6 +847,8 @@ const AdminResult = () => {
                 </button>
               )}
             </div>
+
+            {/* ── CHANGED: Export button now says "Open in Google Sheets" ── */}
             <button
               className="ar-export-btn"
               onClick={handleExport}
@@ -934,9 +856,10 @@ const AdminResult = () => {
               title={
                 (analytics.totalResponses || 0) === 0
                   ? "No responses to export"
-                  : "Export analytics to Excel"
+                  : "Download CSV and open Google Sheets"
               }
             >
+              {/* Google Sheets icon (simplified) */}
               <svg
                 width="13"
                 height="13"
@@ -946,16 +869,16 @@ const AdminResult = () => {
                 strokeWidth="2.5"
                 strokeLinecap="round"
               >
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+                <line x1="3" y1="15" x2="21" y2="15" />
+                <line x1="9" y1="3" x2="9" y2="21" />
               </svg>
-              Export
+              Google Sheets
             </button>
           </div>
         </div>
 
-        {/* ── Banners ── */}
         {isDeletedForm && (
           <DeletedFormBanner
             formTitle={currentForm?.title}
@@ -966,7 +889,6 @@ const AdminResult = () => {
           <DraftBanner formTitle={currentForm.title} basePath={basePath} />
         )}
 
-        {/* ── KPI Strip ── */}
         {showResponses && (
           <div className="ar-kpi-row">
             <div className="ar-kpi">
@@ -1007,9 +929,7 @@ const AdminResult = () => {
           </div>
         )}
 
-        {/* ── Body Grid ── */}
         <div className="ar-grid">
-          {/* Table */}
           <div className="ar-table-card">
             <div className="ar-table-header">
               <div>
@@ -1143,7 +1063,6 @@ const AdminResult = () => {
             </div>
           </div>
 
-          {/* Sidebar */}
           {showResponses && (
             <div className="ar-sidebar">
               {sentimentData.length > 0 && (
@@ -1157,12 +1076,6 @@ const AdminResult = () => {
                       marginTop: 12,
                     }}
                   >
-                    {/*
-                      ── CHANGED: sentimentData[2] (Negative) is now displayed as "Average"
-                      with a neutral amber color and 📊 icon instead of red/😞.
-                      The underlying data key stays "negative" (server unchanged),
-                      only the display label and styling change here.
-                    */}
                     {[
                       {
                         data: sentimentData[0],
@@ -1204,7 +1117,6 @@ const AdminResult = () => {
                               width: 55,
                             }}
                           >
-                            {/* Use displayLabel override if provided, else use server label */}
                             {item.displayLabel || item.data.label}
                           </span>
                           <ProgressBar
@@ -1228,7 +1140,6 @@ const AdminResult = () => {
                   </div>
                 </div>
               )}
-
               {keywords.length > 0 && (
                 <div className="ar-side-card">
                   <h3 className="ar-side-title">Top Keywords</h3>
@@ -1291,7 +1202,6 @@ const AdminResult = () => {
                   </div>
                 </div>
               )}
-
               {currentForm && (
                 <div className="ar-side-card">
                   <h3 className="ar-side-title">Form Info</h3>
@@ -1389,7 +1299,6 @@ const AdminResult = () => {
                 </svg>
               </button>
             </div>
-
             <div className="ar-resp-card">
               <div className="ar-resp-avatar">
                 {(selectedResponse.respondentName || "A")
@@ -1432,7 +1341,6 @@ const AdminResult = () => {
                 </div>
               </div>
             </div>
-
             <div
               style={{
                 marginTop: 18,
@@ -1472,17 +1380,109 @@ const AdminResult = () => {
                     >
                       {a.prompt || `Answer ${idx + 1}`}
                     </p>
-                    <p
-                      style={{
-                        fontSize: 13,
-                        color: "#374151",
-                        lineHeight: 1.6,
-                        margin: 0,
-                        fontStyle: "italic",
-                      }}
-                    >
-                      {formatAnswerValue(a.value)}
-                    </p>
+                    {(() => {
+                      const formatted = formatAnswerValue(a.value);
+                      if (
+                        formatted &&
+                        typeof formatted === "object" &&
+                        formatted.type === "file"
+                      ) {
+                        const isImage =
+                          formatted.fileType?.startsWith("image/");
+                        const isPdf = formatted.fileType === "application/pdf";
+                        return (
+                          <div style={{ marginTop: 4 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <span style={{ fontSize: 18 }}>
+                                {isImage ? "🖼️" : isPdf ? "📄" : "📎"}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  color: "#374151",
+                                }}
+                              >
+                                {formatted.fileName}
+                              </span>
+                              {formatted.fileSize && (
+                                <span
+                                  style={{ fontSize: 11, color: "#94a3b8" }}
+                                >
+                                  ({Math.round(formatted.fileSize / 1024)}KB)
+                                </span>
+                              )}
+                              {formatted.fileData && (
+                                <a
+                                  href={formatted.fileData}
+                                  download={formatted.fileName}
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#2563eb",
+                                    background: "#eff6ff",
+                                    border: "1px solid #bfdbfe",
+                                    borderRadius: 6,
+                                    padding: "3px 10px",
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  ⬇ Download
+                                </a>
+                              )}
+                            </div>
+                            {isImage && formatted.fileData && (
+                              <img
+                                src={formatted.fileData}
+                                alt={formatted.fileName}
+                                style={{
+                                  maxWidth: "100%",
+                                  maxHeight: 260,
+                                  borderRadius: 8,
+                                  border: "1px solid #e8ecf0",
+                                  objectFit: "contain",
+                                  display: "block",
+                                  marginTop: 10,
+                                }}
+                              />
+                            )}
+                            {!formatted.fileData && (
+                              <p
+                                style={{
+                                  fontSize: 12,
+                                  color: "#94a3b8",
+                                  margin: "6px 0 0",
+                                  fontStyle: "italic",
+                                }}
+                              >
+                                File data not available — check if file upload
+                                storage is configured.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }
+                      return (
+                        <p
+                          style={{
+                            fontSize: 13,
+                            color: "#374151",
+                            lineHeight: 1.6,
+                            margin: 0,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          {formatted}
+                        </p>
+                      );
+                    })()}
                   </div>
                 ))
               ) : (
@@ -1500,160 +1500,159 @@ const AdminResult = () => {
               )}
             </div>
 
-            {selectedResponse.nominationTableData &&
-              selectedResponse.nominationTableData.columns?.length > 0 && (
-                <div style={{ marginTop: 18 }}>
-                  <p
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94a3b8",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      margin: "0 0 10px",
-                    }}
-                  >
-                    {selectedResponse.nominationTableData.heading ||
-                      "Nomination Table"}
-                    {selectedResponse.nominationTableData.subHeading && (
-                      <span
-                        style={{
-                          fontWeight: 500,
-                          marginLeft: 6,
-                          textTransform: "none",
-                          fontSize: 11,
-                        }}
-                      >
-                        — {selectedResponse.nominationTableData.subHeading}
-                      </span>
-                    )}
-                  </p>
-                  {(selectedResponse.nominationTableData.institutionName ||
-                    selectedResponse.nominationTableData.coordinatorName) && (
-                    <div
+            {selectedResponse.nominationTableData?.columns?.length > 0 && (
+              <div style={{ marginTop: 18 }}>
+                <p
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "#94a3b8",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    margin: "0 0 10px",
+                  }}
+                >
+                  {selectedResponse.nominationTableData.heading ||
+                    "Nomination Table"}
+                  {selectedResponse.nominationTableData.subHeading && (
+                    <span
                       style={{
-                        display: "flex",
-                        gap: 16,
-                        marginBottom: 10,
-                        flexWrap: "wrap",
+                        fontWeight: 500,
+                        marginLeft: 6,
+                        textTransform: "none",
+                        fontSize: 11,
                       }}
                     >
-                      {selectedResponse.nominationTableData.institutionName && (
-                        <div style={{ fontSize: 12, color: "#374151" }}>
-                          <span style={{ fontWeight: 700, color: "#64748b" }}>
-                            {selectedResponse.nominationTableData
-                              .institutionLabel || "Institution"}
-                            :{" "}
-                          </span>
-                          {selectedResponse.nominationTableData.institutionName}
-                        </div>
-                      )}
-                      {selectedResponse.nominationTableData.coordinatorName && (
-                        <div style={{ fontSize: 12, color: "#374151" }}>
-                          <span style={{ fontWeight: 700, color: "#64748b" }}>
-                            {selectedResponse.nominationTableData
-                              .coordinatorLabel || "Coordinator"}
-                            :{" "}
-                          </span>
-                          {selectedResponse.nominationTableData.coordinatorName}
-                        </div>
-                      )}
-                    </div>
+                      — {selectedResponse.nominationTableData.subHeading}
+                    </span>
                   )}
+                </p>
+                {(selectedResponse.nominationTableData.institutionName ||
+                  selectedResponse.nominationTableData.coordinatorName) && (
                   <div
                     style={{
-                      overflowX: "auto",
-                      borderRadius: 8,
-                      border: "1.5px solid #111827",
+                      display: "flex",
+                      gap: 16,
+                      marginBottom: 10,
+                      flexWrap: "wrap",
                     }}
                   >
-                    <table
-                      style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                        fontSize: 12,
-                        fontFamily: "'DM Sans', system-ui",
-                        minWidth: 300,
-                      }}
-                    >
-                      <thead>
-                        <tr>
-                          <th
-                            style={{
-                              border: "1px solid #111827",
-                              padding: "7px 10px",
-                              background: "#fffde7",
-                              fontWeight: 700,
-                              color: "#111827",
-                              textAlign: "center",
-                              width: 40,
-                            }}
-                          >
-                            Sr.
-                          </th>
-                          {selectedResponse.nominationTableData.columns.map(
-                            (col) => (
-                              <th
-                                key={col.id || col.label}
-                                style={{
-                                  border: "1px solid #111827",
-                                  padding: "7px 10px",
-                                  background: "#fffde7",
-                                  fontWeight: 700,
-                                  color: "#111827",
-                                  textAlign: "center",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {col.label}
-                              </th>
-                            ),
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(selectedResponse.nominationTableData.rows || [])
-                          .filter((row) =>
-                            selectedResponse.nominationTableData.columns.some(
-                              (col) => row[col.id]?.trim(),
-                            ),
-                          )
-                          .map((row, ri) => (
-                            <tr key={ri}>
-                              <td
-                                style={{
-                                  border: "1px solid #111827",
-                                  padding: "6px 8px",
-                                  textAlign: "center",
-                                  fontWeight: 700,
-                                  fontSize: 11,
-                                  background: "#fffde7",
-                                }}
-                              >
-                                {ri + 1}
-                              </td>
-                              {selectedResponse.nominationTableData.columns.map(
-                                (col) => (
-                                  <td
-                                    key={col.id || col.label}
-                                    style={{
-                                      border: "1px solid #111827",
-                                      padding: "6px 10px",
-                                      color: "#374151",
-                                      background: "#fff",
-                                    }}
-                                  >
-                                    {row[col.id] || "—"}
-                                  </td>
-                                ),
-                              )}
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
+                    {selectedResponse.nominationTableData.institutionName && (
+                      <div style={{ fontSize: 12, color: "#374151" }}>
+                        <span style={{ fontWeight: 700, color: "#64748b" }}>
+                          {selectedResponse.nominationTableData
+                            .institutionLabel || "Institution"}
+                          :{" "}
+                        </span>
+                        {selectedResponse.nominationTableData.institutionName}
+                      </div>
+                    )}
+                    {selectedResponse.nominationTableData.coordinatorName && (
+                      <div style={{ fontSize: 12, color: "#374151" }}>
+                        <span style={{ fontWeight: 700, color: "#64748b" }}>
+                          {selectedResponse.nominationTableData
+                            .coordinatorLabel || "Coordinator"}
+                          :{" "}
+                        </span>
+                        {selectedResponse.nominationTableData.coordinatorName}
+                      </div>
+                    )}
                   </div>
+                )}
+                <div
+                  style={{
+                    overflowX: "auto",
+                    borderRadius: 8,
+                    border: "1.5px solid #111827",
+                  }}
+                >
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      fontSize: 12,
+                      fontFamily: "'DM Sans',system-ui",
+                      minWidth: 300,
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th
+                          style={{
+                            border: "1px solid #111827",
+                            padding: "7px 10px",
+                            background: "#fffde7",
+                            fontWeight: 700,
+                            color: "#111827",
+                            textAlign: "center",
+                            width: 40,
+                          }}
+                        >
+                          Sr.
+                        </th>
+                        {selectedResponse.nominationTableData.columns.map(
+                          (col) => (
+                            <th
+                              key={col.id || col.label}
+                              style={{
+                                border: "1px solid #111827",
+                                padding: "7px 10px",
+                                background: "#fffde7",
+                                fontWeight: 700,
+                                color: "#111827",
+                                textAlign: "center",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {col.label}
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedResponse.nominationTableData.rows || [])
+                        .filter((row) =>
+                          selectedResponse.nominationTableData.columns.some(
+                            (col) => row[col.id]?.trim(),
+                          ),
+                        )
+                        .map((row, ri) => (
+                          <tr key={ri}>
+                            <td
+                              style={{
+                                border: "1px solid #111827",
+                                padding: "6px 8px",
+                                textAlign: "center",
+                                fontWeight: 700,
+                                fontSize: 11,
+                                background: "#fffde7",
+                              }}
+                            >
+                              {ri + 1}
+                            </td>
+                            {selectedResponse.nominationTableData.columns.map(
+                              (col) => (
+                                <td
+                                  key={col.id || col.label}
+                                  style={{
+                                    border: "1px solid #111827",
+                                    padding: "6px 10px",
+                                    color: "#374151",
+                                    background: "#fff",
+                                  }}
+                                >
+                                  {row[col.id] || "—"}
+                                </td>
+                              ),
+                            )}
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
-              )}
+              </div>
+            )}
 
             <button
               type="button"
@@ -1673,6 +1672,7 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
 @keyframes spin    { to { transform:rotate(360deg); } }
 @keyframes scaleIn { from { opacity:0; transform:scale(0.92); } to { opacity:1; transform:scale(1); } }
+@keyframes ar-toast-in { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
 
 .ar-main    { flex:1; overflow-y:auto; background:#f8fafc; padding:28px 20px 60px; font-family:'DM Sans',system-ui,sans-serif; }
 .ar-load-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#f8fafc; gap:12px; font-family:'DM Sans',system-ui,sans-serif; }
@@ -1696,14 +1696,13 @@ const CSS = `
 .ar-form-switcher-btn--open .ar-form-switcher-chevron { transform:rotate(180deg); color:#2563eb; }
 
 @keyframes ar-panel-in { from { opacity:0; transform:translateY(-8px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }
-.ar-fsp { position:absolute; top:calc(100% + 6px); left:-8px; z-index:9999; background:#fff; border:1.5px solid #e2e8f0; border-radius:16px; box-shadow:0 20px 60px rgba(15,23,42,0.16), 0 4px 16px rgba(15,23,42,0.06); width:360px; animation:ar-panel-in 0.18s cubic-bezier(0.34,1.2,0.64,1); }
+.ar-fsp { position:absolute; top:calc(100% + 6px); left:-8px; z-index:9999; background:#fff; border:1.5px solid #e2e8f0; border-radius:16px; box-shadow:0 20px 60px rgba(15,23,42,0.16),0 4px 16px rgba(15,23,42,0.06); width:360px; animation:ar-panel-in 0.18s cubic-bezier(0.34,1.2,0.64,1); }
 .ar-fsp-search { display:flex; align-items:center; gap:0; padding:12px 14px; border-bottom:1px solid #f1f5f9; position:relative; }
 .ar-fsp-search-icon { position:absolute; left:26px; color:#94a3b8; pointer-events:none; flex-shrink:0; }
 .ar-fsp-input { flex:1; padding:9px 36px 9px 30px; background:#f8fafc; border:1.5px solid #e8ecf0; border-radius:10px; font-size:13px; color:#0f172a; outline:none; font-family:'DM Sans',system-ui,sans-serif; box-sizing:border-box; transition:all 0.15s; width:100%; }
 .ar-fsp-input:focus { border-color:#3b82f6; background:#fff; box-shadow:0 0 0 3px rgba(59,130,246,0.1); }
 .ar-fsp-clear { position:absolute; right:22px; width:20px; height:20px; border-radius:50%; background:#e2e8f0; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#64748b; transition:background 0.13s; flex-shrink:0; }
 .ar-fsp-clear:hover { background:#cbd5e1; }
-
 .ar-fsp-list { max-height:320px; overflow-y:auto; padding:6px 0 4px; }
 .ar-fsp-group { padding:0; }
 .ar-fsp-group + .ar-fsp-group { border-top:1px solid #f1f5f9; padding-top:4px; margin-top:4px; }
@@ -1713,7 +1712,6 @@ const CSS = `
 .ar-fsp-dot--draft   { background:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,0.2); }
 .ar-fsp-dot--closed  { background:#6b7280; box-shadow:0 0 0 2px rgba(107,114,128,0.2); }
 .ar-fsp-dot--deleted { background:#7c3aed; box-shadow:0 0 0 2px rgba(124,58,237,0.15); }
-
 .ar-fsp-item { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-family:'DM Sans',system-ui,sans-serif; text-align:left; transition:background 0.1s; }
 .ar-fsp-item:hover { background:#f8fafc; }
 .ar-fsp-item--active { background:#eff6ff !important; }
@@ -1722,7 +1720,6 @@ const CSS = `
 .ar-fsp-item-body { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
 .ar-fsp-item-title { font-size:13px; font-weight:600; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ar-fsp-item-meta { font-size:11px; color:#94a3b8; font-weight:500; }
-
 .ar-fsp-hint { display:flex; flex-direction:column; align-items:center; gap:6px; padding:20px 16px 16px; color:#94a3b8; font-size:12px; font-weight:500; }
 .ar-fsp-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px 16px; color:#94a3b8; font-size:12px; font-weight:500; }
 .ar-fsp-footer { display:flex; align-items:center; justify-content:center; gap:2px; padding:8px 14px; border-top:1px solid #f1f5f9; font-size:10px; color:#94a3b8; }
@@ -1735,8 +1732,10 @@ const CSS = `
 .ar-search-input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.08); }
 .ar-search-clear { position:absolute; right:8px; width:20px; height:20px; border-radius:99px; background:#e2e8f0; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#64748b; transition:background 0.13s; }
 .ar-search-clear:hover { background:#cbd5e1; }
-.ar-export-btn { display:inline-flex; align-items:center; gap:6px; background:#0f172a; color:#fff; padding:8px 14px; border-radius:9px; font-size:12px; font-weight:700; border:none; cursor:pointer; letter-spacing:0.02em; transition:background 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
-.ar-export-btn:hover:not(:disabled) { background:#2563eb; }
+
+/* ── CHANGED: Export button — green Google Sheets colour ── */
+.ar-export-btn { display:inline-flex; align-items:center; gap:6px; background:#1a6b3c; color:#fff; padding:8px 14px; border-radius:9px; font-size:12px; font-weight:700; border:none; cursor:pointer; letter-spacing:0.02em; transition:background 0.15s; font-family:'DM Sans',system-ui,sans-serif; }
+.ar-export-btn:hover:not(:disabled) { background:#15803d; }
 .ar-export-btn:disabled { opacity:0.45; cursor:not-allowed; }
 
 .ar-draft-banner { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px 16px; margin-bottom:18px; font-size:13px; color:#92400e; font-weight:500; line-height:1.5; }
@@ -1750,7 +1749,6 @@ const CSS = `
 .ar-kpi-label { font-size:10px; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:0.07em; display:block; margin-top:4px; }
 
 .ar-grid { display:grid; grid-template-columns:1fr 270px; gap:18px; align-items:start; }
-
 .ar-table-card { background:#fff; border-radius:13px; border:1px solid #e8ecf0; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
 .ar-table-header { padding:16px 20px; border-bottom:1px solid #f1f5f9; }
 .ar-table-title { font-size:14px; font-weight:800; color:#0f172a; margin:0; }
@@ -1791,10 +1789,7 @@ const CSS = `
 .ar-dismiss-btn { margin-top:22px; width:100%; padding:12px; background:#0f172a; color:#fff; border:none; border-radius:11px; font-size:13px; font-weight:700; cursor:pointer; letter-spacing:0.02em; text-transform:uppercase; font-family:'DM Sans',system-ui,sans-serif; transition:background 0.15s; }
 .ar-dismiss-btn:hover { background:#2563eb; }
 
-@media (max-width:960px) {
-  .ar-grid { grid-template-columns:1fr; }
-  .ar-sidebar { display:flex; flex-direction:column; gap:13px; width:100%; }
-}
+@media (max-width:960px) { .ar-grid { grid-template-columns:1fr; } .ar-sidebar { display:flex; flex-direction:column; gap:13px; width:100%; } }
 @media (max-width:700px) {
   .ar-main { padding:16px 12px 60px; }
   .ar-top-bar { flex-direction:column; align-items:flex-start; gap:10px; }

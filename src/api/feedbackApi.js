@@ -30,8 +30,9 @@ export const getFormAccessToken = (formId) => {
 export const clearFormAccessToken = (formId) => {
   try {
     sessionStorage.removeItem(FORM_TOKEN_KEY(formId));
-  } catch {// intentionally empty
-    }
+  } catch {
+    // intentionally empty
+  }
 };
 
 const request = async (path, options = {}) => {
@@ -176,4 +177,9 @@ export const searchResultsByFormTitle = (q) =>
 export const permanentDeleteForm = (formId) =>
   request(`/forms/${encodeURIComponent(formId)}/permanent`, {
     method: "DELETE",
+  });
+
+export const exportFormToSheet = (formId) =>
+  request(`/forms/${encodeURIComponent(formId)}/export-sheet`, {
+    method: "POST",
   });
