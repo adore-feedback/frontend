@@ -1,7 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { getFormResults, getForms } from "../../api/feedbackApi";
+import {
+  getFormResults,
+  getForms,
+  exportFormToSheet,
+} from "../../api/feedbackApi";
 import { useAuth } from "../../context/AuthContext";
+import { useGoogleLogin } from "@react-oauth/google";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -278,25 +283,71 @@ const AdminResult = () => {
     return String(value);
   };
 
-  const handleExport = useCallback(async () => {
-    if (!currentForm) return;
-    const fId = currentForm._id || currentForm.id;
-    if (!fId) return;
+  const handleExport = useGoogleLogin({
+    scope:
+      "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets",
+      ux_mode: 'popup',
+    onSuccess: async (tokenResponse) => {
+      console.log(
+        "🟢 [1] Google Login Success! Token received:",
+        tokenResponse.access_token ? "YES" : "NO",
+      );
 
-    setExportToast("⏳ Creating your Google Sheet…");
+      if (!currentForm) {
+        console.error("🔴 [ERROR] currentForm is undefined!");
+        return;
+      }
 
-    try {
-      const { exportFormToSheet } = await import("../../api/feedbackApi");
-      const result = await exportFormToSheet(fId);
-      window.open(result.url, "_blank", "noopener,noreferrer");
-      setExportToast("✅ Google Sheet created and opened!");
-    } catch (err) {
-      console.error("Export error:", err);
-      setExportToast("❌ Export failed: " + (err.message || "Unknown error"));
-    }
+      const fId = currentForm._id || currentForm.id;
+      console.log("🟢 [2] Form ID found:", fId);
 
-    setTimeout(() => setExportToast(""), 6000);
-  }, [currentForm]);
+      setExportToast("⏳ Securing permission & creating your Google Sheet…");
+
+      const newTab = window.open("about:blank", "_blank");
+      if (newTab) {
+        newTab.document.write(
+          "<h2 style='font-family: sans-serif; padding: 20px;'>Creating your Google Sheet, please wait...</h2>",
+        );
+        console.log("🟢 [3] Blank tab successfully opened.");
+      } else {
+        console.warn("🟠 [WARNING] Browser blocked the blank tab.");
+      }
+
+      try {
+        console.log("🟢 [4] Sending request to backend api/feedbackApi.js...");
+
+        // Using the static import from the top of the file
+        const result = await exportFormToSheet(fId, tokenResponse.access_token);
+
+        console.log("🟢 [5] Backend returned successfully! Result:", result);
+
+        if (newTab && result.url) {
+          console.log("🟢 [6] Redirecting tab to Google Sheets URL...");
+          newTab.location.href = result.url;
+        } else if (result.url) {
+          window.open(result.url, "_blank", "noopener,noreferrer");
+        } else {
+          console.error("🔴 [ERROR] Backend succeeded but returned no URL!");
+        }
+
+        setExportToast("✅ Google Sheet created in your personal Drive!");
+      } catch (err) {
+        console.error("🔴 [ERROR] Export failed at Step 4:", err);
+        if (newTab) {
+          newTab.document.write(
+            `<p style='color: red;'>Export failed: ${err.message}</p>`,
+          );
+        }
+        setExportToast("❌ Export failed: " + (err.message || "Unknown error"));
+      }
+
+      setTimeout(() => setExportToast(""), 6000);
+    },
+    onError: (error) => {
+      console.error("🔴 [ERROR] Google Login popup closed or failed:", error);
+      setExportToast("❌ Google Login Failed");
+    },
+  });
 
   const STATUS_ORDER = { live: 0, draft: 1, closed: 2, deleted: 3 };
   const sortedAllForms = [...allForms].sort((a, b) => {
@@ -850,8 +901,12 @@ const AdminResult = () => {
 
             {/* ── CHANGED: Export button now says "Open in Google Sheets" ── */}
             <button
+              type="button"
               className="ar-export-btn"
-              onClick={handleExport}
+              onClick={(e) => {
+                e.preventDefault(); // 🌟 Stops any ghost navigations
+                handleExport(); // 🌟 Calls Google cleanly without passing the Event object
+              }}
               disabled={!currentForm || (analytics.totalResponses || 0) === 0}
               title={
                 (analytics.totalResponses || 0) === 0

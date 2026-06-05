@@ -179,7 +179,12 @@ export const permanentDeleteForm = (formId) =>
     method: "DELETE",
   });
 
-export const exportFormToSheet = (formId) =>
-  request(`/forms/${encodeURIComponent(formId)}/export-sheet`, {
+export const exportFormToSheet = (formId, accessToken) => {
+  // Uses your built-in request wrapper so API_BASE_URL and cookies apply automatically
+  return request(`/forms/${encodeURIComponent(formId)}/export-sheet`, {
     method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+    },
   });
+};
