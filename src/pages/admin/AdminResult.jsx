@@ -283,70 +283,39 @@ const AdminResult = () => {
     return String(value);
   };
 
+  // NEW: State variable to store the successfully created sheet URL
+  const [createdSheetUrl, setCreatedSheetUrl] = useState("");
+
   const handleExport = useGoogleLogin({
-    scope:
-      "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets",
-      ux_mode: 'popup',
+    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets',
+    ux_mode: 'popup', 
     onSuccess: async (tokenResponse) => {
-      console.log(
-        "🟢 [1] Google Login Success! Token received:",
-        tokenResponse.access_token ? "YES" : "NO",
-      );
-
-      if (!currentForm) {
-        console.error("🔴 [ERROR] currentForm is undefined!");
-        return;
-      }
-
+      if (!currentForm) return;
       const fId = currentForm._id || currentForm.id;
-      console.log("🟢 [2] Form ID found:", fId);
-
+      
       setExportToast("⏳ Securing permission & creating your Google Sheet…");
-
-      const newTab = window.open("about:blank", "_blank");
-      if (newTab) {
-        newTab.document.write(
-          "<h2 style='font-family: sans-serif; padding: 20px;'>Creating your Google Sheet, please wait...</h2>",
-        );
-        console.log("🟢 [3] Blank tab successfully opened.");
-      } else {
-        console.warn("🟠 [WARNING] Browser blocked the blank tab.");
-      }
+      setCreatedSheetUrl(""); // Reset previous URLs
 
       try {
-        console.log("🟢 [4] Sending request to backend api/feedbackApi.js...");
-
-        // Using the static import from the top of the file
+        const { exportFormToSheet } = await import("../../api/feedbackApi");
         const result = await exportFormToSheet(fId, tokenResponse.access_token);
-
-        console.log("🟢 [5] Backend returned successfully! Result:", result);
-
-        if (newTab && result.url) {
-          console.log("🟢 [6] Redirecting tab to Google Sheets URL...");
-          newTab.location.href = result.url;
-        } else if (result.url) {
-          window.open(result.url, "_blank", "noopener,noreferrer");
-        } else {
-          console.error("🔴 [ERROR] Backend succeeded but returned no URL!");
-        }
-
+        
+        // 🌟 FIX: We don't force a popup. We store the URL and show a button.
+        setCreatedSheetUrl(result.url);
         setExportToast("✅ Google Sheet created in your personal Drive!");
+        
+        // Optionally open the window natively (some browsers allow this if triggered fast enough)
+        window.open(result.url, "_blank", "noopener,noreferrer");
       } catch (err) {
-        console.error("🔴 [ERROR] Export failed at Step 4:", err);
-        if (newTab) {
-          newTab.document.write(
-            `<p style='color: red;'>Export failed: ${err.message}</p>`,
-          );
-        }
+        console.error("Export error:", err);
         setExportToast("❌ Export failed: " + (err.message || "Unknown error"));
+        setTimeout(() => setExportToast(""), 6000);
       }
-
-      setTimeout(() => setExportToast(""), 6000);
     },
-    onError: (error) => {
-      console.error("🔴 [ERROR] Google Login popup closed or failed:", error);
-      setExportToast("❌ Google Login Failed");
-    },
+    onError: () => {
+      setExportToast("❌ Google Login Failed or Blocked by Browser.");
+      setTimeout(() => setExportToast(""), 4000);
+    }
   });
 
   const STATUS_ORDER = { live: 0, draft: 1, closed: 2, deleted: 3 };
@@ -564,7 +533,7 @@ const AdminResult = () => {
     <>
       <style>{CSS}</style>
 
-      {/* ── NEW: Google Sheets export toast ── */}
+      {/* ── Google Sheets export toast ── */}
       {exportToast && (
         <div
           style={{
@@ -594,15 +563,43 @@ const AdminResult = () => {
             height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#34d399"
+            stroke={exportToast.includes("❌") ? "#ef4444" : "#34d399"}
             strokeWidth="2.5"
             strokeLinecap="round"
           >
-            <polyline points="20 6 9 17 4 12" />
+            {exportToast.includes("❌") ? (
+              <line x1="18" y1="6" x2="6" y2="18" />
+            ) : (
+              <polyline points="20 6 9 17 4 12" />
+            )}
+            {exportToast.includes("❌") && <line x1="6" y1="6" x2="18" y2="18" />}
           </svg>
-          <span>{exportToast}</span>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span>{exportToast}</span>
+            {/* 🌟 The magic fallback button! */}
+            {createdSheetUrl && (
+              <a 
+                href={createdSheetUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{
+                  color: "#60a5fa",
+                  textDecoration: "underline",
+                  fontSize: 12,
+                  marginTop: 2
+                }}
+              >
+                Click here to open your spreadsheet
+              </a>
+            )}
+          </div>
+
           <button
-            onClick={() => setExportToast("")}
+            onClick={() => {
+              setExportToast("");
+              setCreatedSheetUrl("");
+            }}
             style={{
               background: "none",
               border: "none",
@@ -612,6 +609,7 @@ const AdminResult = () => {
               lineHeight: 1,
               flexShrink: 0,
               padding: 0,
+              marginLeft: "10px"
             }}
           >
             ✕
