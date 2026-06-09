@@ -3,7 +3,6 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   getFormResults,
   getForms,
-  exportFormToSheet,
 } from "../../api/feedbackApi";
 import { useAuth } from "../../context/AuthContext";
 import { useGoogleLogin } from "@react-oauth/google";

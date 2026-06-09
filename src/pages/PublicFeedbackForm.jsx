@@ -1484,6 +1484,10 @@ const PublicFeedbackForm = () => {
 
   // Flatten hybrid multi-select before submit
   const flattenAnswer = (q, raw) => {
+    if (q.type === "matrix") {
+  // Store as array of {row, column} objects
+  return Object.entries(raw || {}).map(([row, column]) => ({ row, column }));
+}
     if (q.type === "file-upload") {
       if (!raw || !raw.name) return "";
       // Store metadata + data; backend receives it in answer.value
@@ -2769,6 +2773,51 @@ const PublicFeedbackForm = () => {
                     onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
                   />
                 )}
+                {q.type === "matrix" && (
+  <div style={{ overflowX: "auto" }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 400 }}>
+      <thead>
+        <tr>
+          <th style={{ padding: "8px 12px", borderBottom: "1.5px solid #e5e7eb", textAlign: "left", fontSize: 11, color: "#9ca3af", fontWeight: 700 }}></th>
+          {(q.matrixColumns || []).map((col) => (
+            <th key={col} style={{ padding: "8px 10px", borderBottom: "1.5px solid #e5e7eb", textAlign: "center", fontSize: 12, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
+              {col}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {(q.matrixRows || []).map((row) => {
+          const selected = (answers[q.id] || {})[row];
+          return (
+            <tr key={row} style={{ borderBottom: "1px solid #f3f4f6" }}>
+              <td style={{ padding: "10px 12px", fontSize: 13, color: "#374151", fontWeight: 500 }}>{row}</td>
+              {(q.matrixColumns || []).map((col) => (
+                <td key={col} style={{ padding: "10px", textAlign: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => setAnswers({ ...answers, [q.id]: { ...(answers[q.id] || {}), [row]: col } })}
+                    style={{
+                      width: 20, height: 20, borderRadius: "50%", border: selected === col ? "6px solid #6366f1" : "2px solid #d1d5db",
+                      background: "#fff", cursor: "pointer", transition: "all 0.15s",
+                      boxShadow: selected === col ? "0 0 0 3px rgba(99,102,241,0.15)" : "none",
+                      padding: 0, flexShrink: 0,
+                    }}
+                  />
+                </td>
+              ))}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+    {q.required && Object.keys(answers[q.id] || {}).length < (q.matrixRows || []).length && (
+      <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 8, fontStyle: "italic" }}>
+        Please select one option per row
+      </p>
+    )}
+  </div>
+)}
               </section>
             );
           })}

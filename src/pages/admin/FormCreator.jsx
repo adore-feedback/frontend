@@ -21,6 +21,8 @@ const emptyQuestion = () => ({
   answerTemplatesText: "",
   allowCustomText: false,
   imageUrl: "",
+  matrixRowsText: "",
+  matrixColumnsText: "",
 });
 
 const splitList = (v) =>
@@ -148,6 +150,8 @@ const formToState = (apiForm) => ({
     optionsText: (q.options || []).join(", "),
     answerTemplatesText: (q.answerTemplates || []).join(", "),
     allowCustomText: !!q.allowCustomText,
+    matrixRowsText: (q.matrixRows || []).join(", "),
+    matrixColumnsText: (q.matrixColumns || []).join(", "),
   })),
   personalizations: apiForm.personalizations || [],
   nominationTable: apiForm.nominationTable
@@ -231,6 +235,7 @@ const QTYPE_ICONS = {
   "multiple-choice": "☑️",
   paragraph: "📝",
   "file-upload": "📎",
+  matrix: "⊞",
 };
 
 const INITIAL_FORM = {
@@ -271,50 +276,250 @@ const INITIAL_FORM = {
 const GoogleFormImporter = ({ onImport, onClose }) => {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [preview, setPreview] = useState([]);
 
   const parseGoogleFormText = (raw) => {
-    const lines = raw
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
     const questions = [];
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      // Detect question patterns: lines ending in ? or followed by option lines
-      const isQ = line.endsWith("?") || line.match(/^\d+[\.\)]\s+.+/);
-      if (isQ) {
-        const prompt = line.replace(/^\d+[\.\)]\s*/, "").trim();
-        const opts = [];
-        let j = i + 1;
-        while (j < lines.length) {
-          const next = lines[j];
-          // Option patterns: (a) A. ○ □ • - *
-          if (
-            next.match(/^[\(\[]?[a-zA-Z][\)\]\.]\s+.+/) ||
-            next.match(/^[○•\-\*□]\s+.+/)
-          ) {
-            opts.push(
-              next
-                .replace(/^[\(\[]?[a-zA-Z][\)\]\.]?\s*|^[○•\-\*□]\s*/, "")
-                .trim(),
-            );
-            j++;
-          } else break;
-        }
-        const type = opts.length > 1 ? "single-choice" : "text";
-        questions.push({
-          ...emptyQuestion(),
-          prompt,
-          type,
-          optionsText: opts.join(", "),
-        });
-        i = j;
-      } else {
-        i++;
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+
+    // ── Noise set ──────────────────────────────────────────────────────────
+    const NOISE_SET = new Set([
+      "choose", "clear selection", "clear form", "next", "back", "submit",
+      "required", "* indicates required question", "indicates required question",
+      "never submit passwords through google forms.",
+      "preview mode", "published", "copy responder link",
+      "record my email address with my response",
+      "does this form look suspicious? report",
+      "this content is neither created nor endorsed by google.",
+    ]);
+
+    const isNoise = (l) => {
+      const low = l.toLowerCase().replace(/\*/g, "").trim();
+      if (NOISE_SET.has(low)) return true;
+      if (/^email\s*\*?$/.test(low)) return true;
+      if (/^page \d+ of \d+/i.test(low)) return true;
+      if (/^\*?\s*indicates required/i.test(low)) return true;
+      if (/^- terms of service/i.test(low)) return true;
+      if (/^- privacy policy/i.test(low)) return true;
+      return false;
+    };
+
+    // A line is "noise for options" — not a valid option candidate
+    const isNoiseForOpts = (l) => {
+      const low = l.toLowerCase().replace(/\*/g, "").trim();
+      return NOISE_SET.has(low);
+    };
+
+    const NUMBERED_Q_RE = /^(\d+)[\.\)]\s+(.+)/;
+
+    // ── Pass 1: find numbered question positions ───────────────────────────
+    const qStarts = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (isNoise(lines[i])) continue;
+      const m = lines[i].match(NUMBERED_Q_RE);
+      if (m) {
+        qStarts.push({ lineIdx: i, num: parseInt(m[1], 10), prompt: m[2].trim() });
       }
     }
+
+    if (qStarts.length === 0) return [];
+
+    // ── Pass 1b: description paragraph (lines before Q1) ──────────────────
+    const firstQLine = qStarts[0].lineIdx;
+    let titleFound = false;
+    const descLines = [];
+    for (let i = 0; i < firstQLine; i++) {
+      const l = lines[i];
+      if (isNoise(l)) continue;
+      if (!titleFound) { titleFound = true; continue; } // skip form title
+      descLines.push(l);
+    }
+    const descText = descLines.join(" ").trim();
+    if (descText.length > 30) {
+      questions.push({ ...emptyQuestion(), prompt: descText, type: "paragraph" });
+    }
+
+    // ── Pass 2: classify each question ────────────────────────────────────
+    for (let qi = 0; qi < qStarts.length; qi++) {
+      const { lineIdx, prompt } = qStarts[qi];
+      const endIdx = qi + 1 < qStarts.length ? qStarts[qi + 1].lineIdx : lines.length;
+
+      // Raw body lines (before any filtering) — used to detect Google Forms markers
+      const rawBody = lines.slice(lineIdx + 1, endIdx);
+
+      // Check for Google Forms UI markers in raw body
+      const hasChooseMarker = rawBody.some(l => l.trim().toLowerCase() === "choose");
+      const hasClearSelection = rawBody.some(l => l.trim().toLowerCase() === "clear selection");
+
+      // Filtered body lines (noise removed) — used for actual classification
+      const bodyLines = rawBody.filter(l => !isNoiseForOpts(l));
+
+      const lower = prompt.toLowerCase();
+
+      // ── 1. Multi-select from prompt language ─────────────────────────────
+      const isMultiFromPrompt =
+        /select more than one|select all that apply|check all|choose all|you can select more/i.test(prompt);
+
+      // ── 2. Matrix detection ───────────────────────────────────────────────
+      // Google Forms matrix copies column headers on one line (tab-separated)
+      // then each row label on subsequent lines
+      // When plain-copied (no tabs), columns appear as SEPARATE lines before rows
+      // We detect matrix by: first body line contains the word pattern matching
+      // all 4 known columns, OR has tabs
+      let matrixDetected = false;
+      if (bodyLines.length >= 2) {
+        const firstBody = bodyLines[0].replace(/^\*\s*/, "").trim();
+
+        // Tab-separated columns on one line
+        const tabCols = firstBody.split(/\t/).map(s => s.trim()).filter(Boolean);
+
+        // Or space-separated (3+ spaces) on one line
+        const spaceCols = firstBody.split(/\s{3,}/).map(s => s.trim()).filter(Boolean);
+
+        const candidateCols = tabCols.length >= 2 ? tabCols
+          : spaceCols.length >= 2 ? spaceCols
+          : [];
+
+        if (candidateCols.length >= 2) {
+          const matrixRows = bodyLines
+            .slice(1)
+            .map(l => l.split(/\t/)[0].trim())
+            .filter(l => l.length > 0 && !isNoiseForOpts(l));
+          const uniqueRows = [...new Set(matrixRows)];
+          if (uniqueRows.length > 0) {
+            questions.push({
+              ...emptyQuestion(),
+              prompt,
+              type: "matrix",
+              matrixRowsText: uniqueRows.join(", "),
+              matrixColumnsText: candidateCols.join(", "),
+            });
+            matrixDetected = true;
+          }
+        }
+
+        // ── Plain-copy matrix: columns appear as consecutive short lines
+        // BEFORE the rows. Heuristic: if question contains "rate" + "skills"
+        // and we have known rating scale words among body lines
+        if (!matrixDetected) {
+          const knownScaleWords = ["beginner", "basic", "intermediate", "advanced",
+            "never", "rarely", "sometimes", "often", "always",
+            "poor", "fair", "good", "excellent",
+            "strongly disagree", "disagree", "agree", "strongly agree",
+            "not at all", "very much"];
+          const bodyLower = bodyLines.map(l => l.toLowerCase());
+          const scaleMatches = knownScaleWords.filter(w =>
+            bodyLower.some(l => l === w || l.startsWith(w))
+          );
+          // If 3+ scale words found AND 2+ non-scale lines (row labels)
+          if (scaleMatches.length >= 3) {
+            const colLines = bodyLines.filter(l =>
+              knownScaleWords.some(w => l.toLowerCase() === w || l.toLowerCase().startsWith(w))
+            );
+            const rowLines = bodyLines.filter(l =>
+              !knownScaleWords.some(w => l.toLowerCase() === w || l.toLowerCase().startsWith(w))
+            );
+            if (colLines.length >= 2 && rowLines.length >= 2) {
+              const uniqueCols = [...new Set(colLines)];
+              const uniqueRows = [...new Set(rowLines)];
+              questions.push({
+                ...emptyQuestion(),
+                prompt,
+                type: "matrix",
+                matrixRowsText: uniqueRows.join(", "),
+                matrixColumnsText: uniqueCols.join(", "),
+              });
+              matrixDetected = true;
+            }
+          }
+        }
+      }
+
+      if (matrixDetected) continue;
+
+      // ── 3. Linear scale (digit-only row) ─────────────────────────────────
+      if (bodyLines.length >= 1) {
+        const scaleParts = bodyLines[0].split(/[\t\s]+/).map(s => s.trim()).filter(Boolean);
+        if (scaleParts.length >= 2 && scaleParts.every(p => /^\d+$/.test(p))) {
+          questions.push({ ...emptyQuestion(), prompt, type: "rating" });
+          continue;
+        }
+      }
+
+      // ── 4. Collect options ────────────────────────────────────────────────
+      const isValidOption = (l) => {
+        const t = l.trim();
+        return (
+          t.length > 0 &&
+          t.length < 150 &&
+          !t.endsWith("?") &&
+          !/^\d+[\.\)]\s/.test(t) &&
+          !isNoiseForOpts(t)
+        );
+      };
+
+      const stripPrefix = (l) =>
+        l.replace(/^[○◯•□☐☑✓✗]\s*/, "")
+         .replace(/^[\(\[]?[a-zA-Z0-9][\)\]\.]?\s+/, "")
+         .replace(/^[-\*]\s+/, "")
+         .trim();
+
+      const hasRadioPrefix = rawBody.some(l => /^[○◯•]\s+/.test(l));
+      const hasCheckboxPrefix = rawBody.some(l => /^[□☐☑✓✗]\s+/.test(l));
+
+      const opts = [...new Set(
+        bodyLines.filter(isValidOption).map(stripPrefix).filter(Boolean)
+      )];
+
+      // ── 5. Assign type ────────────────────────────────────────────────────
+      let type;
+
+      if (opts.length >= 2) {
+        // Has actual answer options
+        const isMulti = isMultiFromPrompt || hasCheckboxPrefix;
+        if (isMulti) {
+          type = "multiple-choice";
+        } else {
+          // hasChooseMarker = dropdown in Google Forms → single-choice
+          // hasClearSelection = radio group → single-choice
+          // hasRadioPrefix = explicit radio symbols → single-choice
+          // plain options with no marker → default single-choice
+          type = "single-choice";
+        }
+      } else {
+        // No options — use keyword heuristics on the prompt
+        if (/\b(upload|attach|file|document|photo|image|screenshot|resume|cv|certificate|proof)\b/.test(lower)) {
+          type = "file-upload";
+        } else if (/\b(rate|rating|scale|score|out of|stars?|satisfaction|nps|likelihood|likely|recommend)\b/.test(lower)) {
+          type = "rating";
+        } else if (/\b(describe|explain|elaborate|tell us|write|comment|suggestion|opinion|thoughts?|paragraph|detail)\b/.test(lower)) {
+          type = "paragraph";
+        } else {
+          type = "text";
+        }
+      }
+
+      questions.push({
+        ...emptyQuestion(),
+        prompt,
+        type,
+        optionsText: opts.join(", "),
+        answerTemplatesText: "",
+      });
+    }
+
     return questions;
+  };
+
+  const handleTextChange = (val) => {
+    setText(val);
+    setError("");
+    if (val.trim().length > 20) {
+      const parsed = parseGoogleFormText(val);
+      setPreview(parsed);
+    } else {
+      setPreview([]);
+    }
   };
 
   const handleImport = () => {
@@ -325,12 +530,29 @@ const GoogleFormImporter = ({ onImport, onClose }) => {
     }
     const questions = parseGoogleFormText(text);
     if (!questions.length) {
-      setError(
-        "No questions detected. Try copying the full form text from Google Forms preview.",
-      );
+      setError("No questions detected. Try copying the full form text from Google Forms preview.");
       return;
     }
     onImport(questions);
+  };
+
+  const TYPE_ICONS = {
+    text: "✍️",
+    "single-choice": "🔘",
+    "multiple-choice": "☑️",
+    rating: "⭐",
+    matrix: "⊞",
+    paragraph: "📝",
+    "file-upload": "📎",
+  };
+  const TYPE_LABELS = {
+    text: "Text",
+    "single-choice": "Single Choice",
+    "multiple-choice": "Multi Choice",
+    rating: "Rating",
+    matrix: "Matrix/Grid",
+    paragraph: "Paragraph",
+    "file-upload": "File Upload",
   };
 
   return (
@@ -338,8 +560,8 @@ const GoogleFormImporter = ({ onImport, onClose }) => {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(15,23,42,0.5)",
-        backdropFilter: "blur(4px)",
+        background: "rgba(15,23,42,0.6)",
+        backdropFilter: "blur(6px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -350,88 +572,213 @@ const GoogleFormImporter = ({ onImport, onClose }) => {
       <div
         style={{
           background: "#fff",
-          borderRadius: 16,
-          padding: "24px 22px",
+          borderRadius: 20,
           width: "100%",
-          maxWidth: 520,
-          boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+          maxWidth: 640,
+          boxShadow: "0 24px 80px rgba(0,0,0,0.22)",
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: "90vh",
+          overflow: "hidden",
         }}
       >
-        <h3
+        {/* Header */}
+        <div
           style={{
-            fontSize: 16,
-            fontWeight: 800,
-            color: "#0f172a",
-            margin: "0 0 6px",
+            padding: "22px 24px 18px",
+            borderBottom: "1px solid #f1f5f9",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
           }}
         >
-          Import from Google Form
-        </h3>
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 4px" }}>
-          <strong>How to use:</strong>
-        </p>
-        <ol
-          style={{
-            fontSize: 12,
-            color: "#64748b",
-            margin: "0 0 14px",
-            paddingLeft: 18,
-            lineHeight: 1.8,
-          }}
-        >
-          <li>Open your Google Form in a browser</li>
-          <li>
-            Switch to <strong>Preview</strong> mode (eye icon)
-          </li>
-          <li>Select all text (Ctrl+A) and copy (Ctrl+C)</li>
-          <li>Paste it below</li>
-        </ol>
-        <textarea
-          className="fc-input fc-textarea"
-          style={{ height: 180, marginBottom: 10 }}
-          placeholder="Paste Google Form text here…"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        {error && (
-          <p style={{ fontSize: 12, color: "#ef4444", margin: "0 0 10px" }}>
-            {error}
-          </p>
-        )}
-        <div style={{ display: "flex", gap: 8 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <div
+                style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: "linear-gradient(135deg, #4285F4, #34A853)",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+              </div>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", margin: 0 }}>
+                Import from Google Form
+              </h3>
+            </div>
+            <p style={{ fontSize: 12, color: "#64748b", margin: 0, lineHeight: 1.5 }}>
+              Questions <strong>and</strong> answer options are imported automatically
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
             style={{
-              flex: 1,
-              padding: "10px",
-              background: "#f8fafc",
-              border: "1.5px solid #e2e8f0",
-              borderRadius: 9,
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#64748b",
-              cursor: "pointer",
+              width: 32, height: 32, borderRadius: 8,
+              border: "1px solid #e2e8f0", background: "#f8fafc",
+              cursor: "pointer", display: "flex", alignItems: "center",
+              justifyContent: "center", flexShrink: 0, color: "#64748b",
+            }}
+          >✕</button>
+        </div>
+
+        {/* Steps */}
+        <div style={{ padding: "14px 24px 0" }}>
+          <div
+            style={{
+              background: "#f8fafc", border: "1px solid #e8ecf0",
+              borderRadius: 12, padding: "12px 16px",
+              display: "flex", gap: 16, flexWrap: "wrap",
             }}
           >
-            Cancel
-          </button>
+            {[
+              { n: "1", text: "Open your Google Form in Chrome" },
+              { n: "2", text: "Click the Preview (👁) button" },
+              { n: "3", text: "Press Ctrl+A then Ctrl+C" },
+              { n: "4", text: "Paste below — we detect the rest" },
+            ].map((s) => (
+              <div key={s.n} style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: "1 1 180px" }}>
+                <div
+                  style={{
+                    width: 20, height: 20, borderRadius: "50%",
+                    background: "#0f172a", color: "#fff",
+                    fontSize: 10, fontWeight: 800,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0, marginTop: 1,
+                  }}
+                >{s.n}</div>
+                <span style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>{s.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}>
+          <textarea
+            style={{
+              width: "100%", height: 160, padding: "12px 14px",
+              border: "1.5px solid #e8ecf0", borderRadius: 12,
+              fontSize: 13, color: "#0f172a", resize: "vertical",
+              fontFamily: "'DM Sans', system-ui", outline: "none",
+              boxSizing: "border-box", background: "#f8fafc", transition: "border 0.15s",
+            }}
+            placeholder="Paste your Google Form text here…"
+            value={text}
+            onChange={(e) => handleTextChange(e.target.value)}
+            onFocus={(e) => { e.target.style.borderColor = "#3b82f6"; e.target.style.background = "#fff"; }}
+            onBlur={(e) => { e.target.style.borderColor = "#e8ecf0"; e.target.style.background = "#f8fafc"; }}
+          />
+
+          {error && (
+            <div style={{ marginTop: 10, padding: "10px 14px", background: "#fff5f5", border: "1px solid #fecaca", borderRadius: 9, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          {preview.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                  Preview — {preview.length} question{preview.length !== 1 ? "s" : ""} detected
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: 99, padding: "2px 10px" }}>
+                  ✓ Ready to import
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {preview.map((q, idx) => (
+                  <div key={idx} style={{ background: "#f8fafc", border: "1px solid #e8ecf0", borderRadius: 10, padding: "10px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <div
+                        style={{
+                          width: 22, height: 22, borderRadius: 6,
+                          background: "#0f172a", color: "#fff",
+                          fontSize: 10, fontWeight: 800,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          flexShrink: 0, marginTop: 1,
+                        }}
+                      >{idx + 1}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>
+                          {q.prompt.length > 80 ? q.prompt.slice(0, 80) + "…" : q.prompt}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe", borderRadius: 99, padding: "2px 8px" }}>
+                            {TYPE_ICONS[q.type]} {TYPE_LABELS[q.type] || q.type}
+                          </span>
+                          {q.type === "matrix" && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 99, padding: "2px 8px" }}>
+                              {(q.matrixRowsText || "").split(",").filter(Boolean).length} rows ×{" "}
+                              {(q.matrixColumnsText || "").split(",").filter(Boolean).length} cols
+                            </span>
+                          )}
+                          {q.optionsText &&
+                            q.optionsText.split(",").filter(Boolean).slice(0, 4).map((opt, oi) => (
+                              <span
+                                key={oi}
+                                style={{
+                                  fontSize: 10, fontWeight: 600, color: "#475569",
+                                  background: "#fff", border: "1px solid #e2e8f0",
+                                  borderRadius: 99, padding: "2px 8px",
+                                  maxWidth: 100, overflow: "hidden",
+                                  textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                }}
+                              >{opt.trim()}</span>
+                            ))
+                          }
+                          {q.optionsText && q.optionsText.split(",").filter(Boolean).length > 4 && (
+                            <span style={{ fontSize: 10, color: "#94a3b8" }}>
+                              +{q.optionsText.split(",").filter(Boolean).length - 4} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "16px 24px 20px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 10 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              flex: 1, padding: "11px", background: "#f8fafc",
+              border: "1.5px solid #e2e8f0", borderRadius: 10,
+              fontSize: 13, fontWeight: 700, color: "#64748b", cursor: "pointer",
+            }}
+          >Cancel</button>
           <button
             type="button"
             onClick={handleImport}
             style={{
-              flex: 1,
-              padding: "10px",
-              background: "#0f172a",
-              border: "none",
-              borderRadius: 9,
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#fff",
-              cursor: "pointer",
+              flex: 2, padding: "11px",
+              background: preview.length > 0 ? "#0f172a" : "#94a3b8",
+              border: "none", borderRadius: 10,
+              fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              transition: "background 0.15s",
             }}
           >
-            Import Questions
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {preview.length > 0 ? `Import ${preview.length} Question${preview.length !== 1 ? "s" : ""}` : "Import Questions"}
           </button>
         </div>
       </div>
@@ -2413,6 +2760,10 @@ const FormCreator = () => {
             ? !!q.allowCustomText
             : false,
         imageUrl: stripBase64(q.imageUrl || ""),
+        matrixRows:
+          q.type === "matrix" ? splitList(q.matrixRowsText || "") : [],
+        matrixColumns:
+          q.type === "matrix" ? splitList(q.matrixColumnsText || "") : [],
       })),
     nominationTable: {
       enabled: form.nominationTable.enabled,
@@ -3291,8 +3642,8 @@ const FormCreator = () => {
                       ["phoneRequired", "🔒 Phone Required"],
                       ["collectsEmail", "📧 Collect Email"],
                       ["emailRequired", "🔒 Email Required"],
-                      ["collectsCompanyDetails", "🏢 Company Details"],
-                      ["companyDetailsRequired", "🔒 Company Required"],
+                      ["collectsCompanyDetails", "🏢 College Details"],
+                      ["companyDetailsRequired", "🔒 College Details Required"],
                       ["singleSession", "🔐 Single Session"],
                     ].map(([key, lbl]) => (
                       <button
@@ -3914,14 +4265,80 @@ const FormCreator = () => {
                   </button>
                   <button
                     type="button"
-                    className="fc-ghost-btn"
                     onClick={() => setShowGFImporter(true)}
-                    style={{ fontSize: 11, padding: "7px 12px" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      background:
+                        "linear-gradient(135deg, #4285F4 0%, #34A853 100%)",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 12,
+                      padding: "13px 22px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontFamily: "'DM Sans', system-ui",
+                      boxShadow: "0 4px 16px rgba(66,133,244,0.35)",
+                      transition: "all 0.18s",
+                      width: "100%",
+                      justifyContent: "center",
+                      marginTop: 4,
+                      letterSpacing: "0.01em",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = "0.9";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = "1";
+                      e.currentTarget.style.transform = "translateY(0)";
+                    }}
                   >
-                    📋 Import from Google Form
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: "rgba(255,255,255,0.2)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <svg
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#fff"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </div>
+                    <div style={{ textAlign: "left" }}>
+                      <div>Import from Google Form</div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 500,
+                          opacity: 0.8,
+                          marginTop: 1,
+                        }}
+                      >
+                        Paste form text to auto-import questions, options &
+                        grids
+                      </div>
+                    </div>
                   </button>
 
-                  {/* ── Question list ── */}
                   {/* ── Question list (with movable Nomination Table) ── */}
                   <div className="fc-q-list">
                     {(() => {
@@ -4201,6 +4618,9 @@ const FormCreator = () => {
                                     <option value="file-upload">
                                       📎 File Upload
                                     </option>
+                                    <option value="matrix">
+                                      ⊞ Matrix / Grid
+                                    </option>
                                   </select>
                                 </div>
                               )}
@@ -4423,6 +4843,175 @@ const FormCreator = () => {
                                       Allow "add your own answer" text box
                                     </label>
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Matrix / Grid question editor */}
+                              {q.type === "matrix" && (
+                                <div
+                                  style={{
+                                    marginTop: 10,
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 10,
+                                  }}
+                                >
+                                  <div>
+                                    <label
+                                      className="fc-label"
+                                      style={{
+                                        marginBottom: 6,
+                                        display: "block",
+                                      }}
+                                    >
+                                      Row Labels{" "}
+                                      <span className="fc-hint">
+                                        (comma-separated, e.g. "Excel, Canva, AI
+                                        Tools")
+                                      </span>
+                                    </label>
+                                    <input
+                                      className="fc-input"
+                                      placeholder="Row 1, Row 2, Row 3…"
+                                      value={q.matrixRowsText || ""}
+                                      onChange={(e) =>
+                                        updateQuestion(
+                                          idx,
+                                          "matrixRowsText",
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <label
+                                      className="fc-label"
+                                      style={{
+                                        marginBottom: 6,
+                                        display: "block",
+                                      }}
+                                    >
+                                      Column Labels{" "}
+                                      <span className="fc-hint">
+                                        (comma-separated, e.g. "Beginner, Basic,
+                                        Intermediate, Advanced")
+                                      </span>
+                                    </label>
+                                    <input
+                                      className="fc-input"
+                                      placeholder="Option A, Option B, Option C…"
+                                      value={q.matrixColumnsText || ""}
+                                      onChange={(e) =>
+                                        updateQuestion(
+                                          idx,
+                                          "matrixColumnsText",
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  {/* Live preview */}
+                                  {splitList(q.matrixRowsText || "").length >
+                                    0 &&
+                                    splitList(q.matrixColumnsText || "")
+                                      .length > 0 && (
+                                      <div
+                                        style={{
+                                          overflowX: "auto",
+                                          marginTop: 4,
+                                        }}
+                                      >
+                                        <table
+                                          style={{
+                                            borderCollapse: "collapse",
+                                            fontSize: 12,
+                                            minWidth: 300,
+                                          }}
+                                        >
+                                          <thead>
+                                            <tr>
+                                              <th
+                                                style={{
+                                                  padding: "6px 10px",
+                                                  borderBottom:
+                                                    "1.5px solid #e8ecf0",
+                                                  textAlign: "left",
+                                                  color: "#94a3b8",
+                                                  fontWeight: 700,
+                                                  fontSize: 10,
+                                                }}
+                                              ></th>
+                                              {splitList(
+                                                q.matrixColumnsText || "",
+                                              ).map((col) => (
+                                                <th
+                                                  key={col}
+                                                  style={{
+                                                    padding: "6px 10px",
+                                                    borderBottom:
+                                                      "1.5px solid #e8ecf0",
+                                                    textAlign: "center",
+                                                    color: "#0f172a",
+                                                    fontWeight: 700,
+                                                    fontSize: 11,
+                                                    whiteSpace: "nowrap",
+                                                  }}
+                                                >
+                                                  {col}
+                                                </th>
+                                              ))}
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {splitList(
+                                              q.matrixRowsText || "",
+                                            ).map((row) => (
+                                              <tr
+                                                key={row}
+                                                style={{
+                                                  borderBottom:
+                                                    "1px solid #f1f5f9",
+                                                }}
+                                              >
+                                                <td
+                                                  style={{
+                                                    padding: "7px 10px",
+                                                    fontSize: 12,
+                                                    color: "#374151",
+                                                    fontWeight: 500,
+                                                    whiteSpace: "nowrap",
+                                                  }}
+                                                >
+                                                  {row}
+                                                </td>
+                                                {splitList(
+                                                  q.matrixColumnsText || "",
+                                                ).map((col) => (
+                                                  <td
+                                                    key={col}
+                                                    style={{
+                                                      padding: "7px 10px",
+                                                      textAlign: "center",
+                                                    }}
+                                                  >
+                                                    <div
+                                                      style={{
+                                                        width: 16,
+                                                        height: 16,
+                                                        borderRadius: "50%",
+                                                        border:
+                                                          "2px solid #cbd5e1",
+                                                        margin: "0 auto",
+                                                      }}
+                                                    />
+                                                  </td>
+                                                ))}
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
                                 </div>
                               )}
 
